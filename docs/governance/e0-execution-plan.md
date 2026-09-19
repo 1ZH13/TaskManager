@@ -26,7 +26,7 @@ E0-I1 fija los límites que usa la autorización. E0-I2 y E0-I3 pueden finalizar
 
 ## E0-I2 — Matriz y evaluador de capacidades
 
-**Estado:** completado. Evidencia: `pnpm --filter @task-manager/domain typecheck` y `pnpm --filter @task-manager/domain test` (6 pruebas aprobadas).
+**Estado:** completado. Evidencia: `pnpm --filter @task-manager/domain typecheck` y `pnpm --filter @task-manager/domain test` (5 pruebas aprobadas).
 
 **Implementación.**
 
