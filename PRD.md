@@ -96,7 +96,25 @@ Estas capacidades tendrán simulaciones o puertos de integración cuando sean ne
 Administradora
 └── Propiedad horizontal (contexto aislado)
     ├── Gestión administrativa
+        └── Proyecto
+            ├── Resumen
+            ├── Lista
+            ├── Tablero
+            ├── Calendario
+            ├── Cronograma
+            ├── Documentos
+            ├── Formularios
+            └── Informes
     ├── Gestión operativa
+        └── Proyecto
+            ├── Resumen
+            ├── Lista
+            ├── Tablero
+            ├── Calendario
+            ├── Cronograma
+            ├── Documentos
+            ├── Formularios
+            └── Informes
     └── Gestión de contabilidad
         └── Proyecto
             ├── Resumen
@@ -115,7 +133,7 @@ Los tres módulos estarán separados en navegación, filtros, permisos e informe
 
 #### Gestión administrativa
 
-- Contratos y renovaciones.
+
 - Reuniones y actas.
 - Permisos y trámites.
 - Correspondencia.
@@ -141,6 +159,7 @@ Los tres módulos estarán separados en navegación, filtros, permisos e informe
 - Validaciones.
 - Entrega de informes.
 - Tareas vinculadas con proveedores.
+- Seguimientos de cobro.
 
 El módulo contable organiza trabajo; no replica el motor contable de PH Platform.
 
@@ -170,18 +189,13 @@ Puede:
 - Gestionar documentos.
 - Consultar todos los informes del PH.
 - Configurar políticas de validación.
-
-### 6.2 Supervisor o validador
-
-Puede:
-
-- Consultar proyectos y equipos asignados.
-- Crear y asignar tareas cuando tenga permiso.
+- Consultar todos los proyectos y equipos del PH.
+- Crear y asignar tareas.
 - Revisar evidencias.
 - Aprobar o rechazar trabajo terminado.
-- Consultar informes de sus equipos.
+- Consultar todos los informes del PH.
 
-### 6.3 Colaborador
+### 6.2 Colaborador
 
 Puede:
 
@@ -192,7 +206,7 @@ Puede:
 - Añadir comentarios y evidencias.
 - Enviar tareas a validación.
 
-### 6.4 Perfiles especializados
+### 6.3 Perfiles especializados
 
 Limpieza, mantenimiento, seguridad y contabilidad se modelarán como equipos o perfiles de colaborador con permisos configurables. No se duplicarán aplicaciones para cada oficio.
 
@@ -306,7 +320,6 @@ Campos iniciales:
 - Responsable.
 - Equipo.
 - Creador.
-- Validador opcional.
 - Proyecto y tablero.
 - Proveedor opcional.
 - Fecha de inicio.
@@ -342,14 +355,14 @@ Administrador crea y asigna tarea
 → colaborador puede marcarla como estancada con motivo
 → colaborador adjunta evidencia
 → termina la tarea
-→ si requiere validación, supervisor aprueba o rechaza
+→ si requiere validación, un administrador aprueba o rechaza
 → si es rechazada, regresa a una columna activa configurada
 ```
 
 - Marcar como estancada exige un motivo.
 - La política del proyecto determina si terminar exige evidencia.
 - La política determina si terminar exige validación.
-- La validación puede asignarse a una persona o rol supervisor.
+- La validación corresponde a los administradores autorizados del PH.
 - El rechazo exige comentario.
 - Todo cambio se registra en actividad.
 
@@ -359,7 +372,6 @@ Administrador crea y asigna tarea
 - Fecha de inicio obligatoria.
 - Fecha final o número de repeticiones.
 - Responsable o equipo obligatorio.
-- Validador opcional según política.
 - La interfaz mostrará próximas ocurrencias.
 - En esta fase, las ocurrencias podrán simularse en el repositorio local.
 
@@ -409,7 +421,6 @@ Cada ficha contendrá:
 - Cargo.
 - Rol.
 - Equipos.
-- Supervisor.
 - Estado activo o inactivo.
 - Carga de trabajo resumida.
 
@@ -437,7 +448,9 @@ La cédula completa no debe mostrarse en tarjetas generales. Solo se presenta do
 Los archivos se representarán como metadatos y URLs locales durante esta fase. El contrato futuro utilizará almacenamiento privado.
 
 ## 8.12 Formularios
-
+- Formularios de agendar cita con administracion, tiene que tener RUC, DV, el nombre de la persona que va asistir, tiene que tener un calendario con dia y hora.
+- Formulario de envio de facturas, el form tiene que tener una factura fiscal, precio y el ITBMS.
+- crearlo en un HTML aparte.
 - Crear formularios desde plantillas.
 - Añadir campos de texto, texto largo, selección, fecha, persona, proveedor, archivo y prioridad.
 - Marcar campos obligatorios.
@@ -582,7 +595,6 @@ interface WorkItem {
   reporterId: string;
   assigneeId?: string;
   teamId?: string;
-  validatorId?: string;
   providerId?: string;
   parentId?: string;
   startsOn?: string;
@@ -606,7 +618,7 @@ interface Person {
   displayName: string;
   avatarUrl?: string;
   jobTitle?: string;
-  role: 'ADMIN' | 'SUPERVISOR' | 'COLLABORATOR';
+  role: 'ADMIN' | 'COLLABORATOR';
   status: 'ACTIVE' | 'INACTIVE';
 }
 
@@ -963,11 +975,11 @@ El frontend incluirá al menos:
 
 - Dos PH para demostrar aislamiento.
 - Tres módulos por PH.
-- Cuatro proyectos.
-- Seis equipos.
-- Doce personas con distintos roles.
+- Tres proyectos, al menos uno por cada módulo.
+- Dos equipos.
+- Cuatro personas distribuidas entre administradores y colaboradores.
 - Dos proveedores sincronizados simulados.
-- Varios tableros con configuraciones distintas.
+- Varios tableros(2) con configuraciones distintas.
 - Una columna personalizada colocada entre columnas predeterminadas.
 - Tareas normales, recurrentes, atrasadas, estancadas y terminadas.
 - Evidencias simuladas.

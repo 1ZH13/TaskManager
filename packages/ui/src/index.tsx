@@ -22,6 +22,12 @@ export function EmptyState({ title, children }: PropsWithChildren<{ title: strin
 export function ErrorState({ title, children }: PropsWithChildren<{ title: string }>) {
   return <section className="tm-state tm-state--error" role="alert"><h2>{title}</h2><p>{children}</p></section>;
 }
+export function SuccessState({ title, children }: PropsWithChildren<{ title: string }>) {
+  return <section className="tm-state tm-state--success" role="status"><h2>{title}</h2><p>{children}</p></section>;
+}
+export function ConflictState({ onReload, onRetry }: { onReload: () => void; onRetry?: () => void }) {
+  return <section className="tm-state tm-state--error" role="alert"><h2>Hay cambios más recientes</h2><p>Recarga los datos antes de continuar para evitar sobrescribir el trabajo de otra sesión.</p><Button variant="secondary" onClick={onReload}>Recargar</Button>{onRetry && <Button onClick={onRetry}>Reintentar</Button>}</section>;
+}
 export function Skeleton({ label = 'Cargando contenido' }: { label?: string }) {
   return <div className="tm-skeleton" aria-label={label} role="status" />;
 }

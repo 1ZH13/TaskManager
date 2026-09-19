@@ -75,14 +75,14 @@
       "epic": "E0",
       "title": "Documentar decisiones de arquitectura y pendientes de producto",
       "labels": ["foundation", "decision-needed", "priority:critical", "size:S"],
-      "body": "Registrar relaciones muchos-a-muchos, flujo configurable de validación, identidad provisional y decisiones pendientes.\n\nCriterios de aceptación:\n- Las decisiones adoptadas incluyen su motivo y consecuencias.\n- Los pendientes no bloqueantes están separados de los bloqueantes.\n- El documento enlaza al PRD y se mantiene versionado."
+      "body": "Registrar relaciones muchos-a-muchos, flujo configurable de validación, identidad provisional y decisiones pendientes.\n\nCriterios de aceptación:\n- Las decisiones adoptadas incluyen su motivo y consecuencias.\n- Los pendientes no bloqueantes están separados de los bloqueantes.\n- Se documenta que solo existen los roles `ADMIN` y `COLLABORATOR`.\n- Se documenta que el administrador absorbe la revisión y validación y que `validatorId` se elimina.\n- La demo incluye al menos un proyecto por cada uno de los tres módulos.\n- Se aclara que “varios tableros (2)” significa exactamente dos tableros mínimos.\n- Se confirma que “HTML aparte” significa rutas independientes dentro de Next.js, no archivos desconectados de la aplicación.\n- El documento enlaza al PRD y se mantiene versionado."
     },
     {
       "key": "E0-I2",
       "epic": "E0",
       "title": "Definir matriz de permisos y evaluador de capacidades",
       "labels": ["domain", "security", "priority:critical", "size:M"],
-      "body": "Formalizar las capacidades de administrador, supervisor y colaborador por recurso y acción.\n\nCriterios de aceptación:\n- La matriz cubre proyectos, tableros, tareas, validaciones, informes y recursos.\n- Existe una API pura `can(actor, action, resource)`.\n- Las reglas siempre consideran `phId`.\n- Hay pruebas de permitidos y denegados."
+      "body": "Formalizar las capacidades de administrador y colaborador por recurso y acción. El administrador concentra gestión, revisión de evidencias y aprobación o rechazo.\n\nCriterios de aceptación:\n- Solo existen los roles `ADMIN` y `COLLABORATOR`.\n- La matriz cubre proyectos, tableros, tareas, validaciones, informes y recursos.\n- Existe una API pura `can(actor, action, resource)`.\n- Las reglas siempre consideran `phId`.\n- Hay pruebas de permitidos y denegados."
     },
     {
       "key": "E0-I3",
@@ -138,7 +138,7 @@
       "epic": "E2",
       "title": "Implementar persistencia local versionada y datos semilla",
       "labels": ["data", "testing", "priority:critical", "size:L"],
-      "body": "Crear el repositorio local, migraciones y semillas deterministas del PRD.\n\nCriterios de aceptación:\n- Incluye al menos dos PH, cuatro proyectos, seis equipos, doce personas y datos para informes.\n- Los cambios sobreviven una recarga.\n- Restablecer demo reproduce los mismos identificadores y datos.\n- Migraciones y recuperación de datos corruptos están probadas."
+      "body": "Crear el repositorio local, migraciones y semillas deterministas del PRD.\n\nCriterios de aceptación:\n- Incluye al menos dos PH, tres proyectos —uno por módulo—, dos equipos, cuatro personas, dos proveedores y dos tableros.\n- Las personas se distribuyen entre los roles `ADMIN` y `COLLABORATOR`.\n- Conserva datos suficientes para demostrar aislamiento, configuraciones distintas e informes.\n- Los cambios sobreviven una recarga.\n- Restablecer demo reproduce los mismos identificadores y datos.\n- Migraciones y recuperación de datos corruptos están probadas."
     },
     {
       "key": "E2-I3",
@@ -152,7 +152,7 @@
       "epic": "E2",
       "title": "Implementar usuarios y permisos simulados de demostración",
       "labels": ["security", "ui", "priority:critical", "size:L"],
-      "body": "Aplicar la matriz de permisos y permitir cambiar de persona/rol en modo demo.\n\nCriterios de aceptación:\n- Las vistas y acciones responden al actor seleccionado.\n- Los controles denegados se ocultan o explican por qué están deshabilitados.\n- El repositorio también valida permisos; la UI no es la única barrera."
+      "body": "Aplicar la matriz de permisos y permitir cambiar entre administrador y colaborador en modo demo.\n\nCriterios de aceptación:\n- Solo se ofrecen los roles `ADMIN` y `COLLABORATOR`.\n- Las vistas y acciones responden al actor seleccionado.\n- El administrador puede revisar evidencias y aprobar o rechazar trabajo.\n- Los controles denegados se ocultan o explican por qué están deshabilitados.\n- El repositorio también valida permisos; la UI no es la única barrera."
     },
     {
       "key": "E2-I5",
@@ -166,14 +166,14 @@
       "epic": "E3",
       "title": "Implementar proyectos, plantillas y archivado",
       "labels": ["domain", "ui", "priority:high", "size:L"],
-      "body": "Crear CRUD de proyectos para los tres módulos y Kanban vacío.\n\nCriterios de aceptación:\n- Se gestionan nombre, clave, descripción, icono, color, fechas y equipos.\n- Archivar y restaurar respeta permisos.\n- Las claves visibles son únicas dentro del PH."
+      "body": "Crear CRUD de proyectos para los tres módulos y Kanban vacío. Las plantillas administrativas no incluyen contratos/renovaciones; la plantilla contable contempla seguimientos de cobro.\n\nCriterios de aceptación:\n- Se gestionan nombre, clave, descripción, icono, color, fechas y equipos.\n- Las plantillas reflejan el alcance vigente de cada módulo.\n- Archivar y restaurar respeta permisos.\n- Las claves visibles son únicas dentro del PH."
     },
     {
       "key": "E3-I2",
       "epic": "E3",
       "title": "Implementar gestión de personas y privacidad del identificador",
       "labels": ["domain", "ui", "security", "priority:high", "size:M"],
-      "body": "Crear fichas, listado y estados de personas.\n\nCriterios de aceptación:\n- La cédula completa no aparece en tarjetas generales.\n- Solo permisos administrativos revelan el identificador donde corresponde.\n- Estado, rol, supervisor, equipos y carga resumida son visibles según alcance."
+      "body": "Crear fichas, listado y estados de personas.\n\nCriterios de aceptación:\n- La cédula completa no aparece en tarjetas generales.\n- Solo permisos administrativos revelan el identificador donde corresponde.\n- Estado, rol, equipos y carga resumida son visibles según alcance.\n- No existe campo de supervisor ni rol supervisor/validador."
     },
     {
       "key": "E3-I3",
@@ -187,7 +187,7 @@
       "epic": "E3",
       "title": "Crear inicio del PH y navegación por módulos",
       "labels": ["ui", "responsive", "priority:medium", "size:M"],
-      "body": "Construir el inicio contextual y páginas de gestión administrativa, operativa y contable.\n\nCriterios de aceptación:\n- Cada módulo muestra solo sus proyectos autorizados.\n- Accesos rápidos y métricas se derivan de los datos reales.\n- Funciona en escritorio y móvil."
+      "body": "Construir el inicio contextual y páginas de gestión administrativa, operativa y contable. Administración no incluye contratos/renovaciones en el alcance inicial y contabilidad incorpora seguimientos de cobro.\n\nCriterios de aceptación:\n- Cada módulo muestra solo sus proyectos autorizados.\n- El contenido y los accesos rápidos reflejan el alcance vigente del PRD.\n- Accesos rápidos y métricas se derivan de los datos reales.\n- Funciona en escritorio y móvil."
     },
     {
       "key": "E4-I1",
@@ -208,7 +208,7 @@
       "epic": "E4",
       "title": "Implementar CRUD y detalle completo de tareas",
       "labels": ["domain", "ui", "priority:critical", "size:L"],
-      "body": "Crear tareas, incidencias, subtareas, hitos y tareas recurrentes con su panel de detalle.\n\nCriterios de aceptación:\n- Se soportan los campos definidos en el PRD.\n- La clave legible se genera por proyecto sin colisiones.\n- Las mutaciones crean eventos de actividad.\n- Validaciones Zod y permisos se aplican antes de persistir."
+      "body": "Crear tareas, incidencias, subtareas, hitos y tareas recurrentes con su panel de detalle. No existe campo de validador ni `validatorId`.\n\nCriterios de aceptación:\n- Se soportan los campos vigentes definidos en el PRD.\n- La configuración de validación no requiere asignar un validador.\n- La clave legible se genera por proyecto sin colisiones.\n- Las mutaciones crean eventos de actividad.\n- Validaciones Zod y permisos se aplican antes de persistir."
     },
     {
       "key": "E4-I4",
@@ -229,7 +229,7 @@
       "epic": "E4",
       "title": "Implementar bloqueos y flujo configurable de validación",
       "labels": ["domain", "ui", "priority:critical", "size:L"],
-      "body": "Aplicar políticas de bloqueo, evidencia y aprobación por proyecto.\n\nCriterios de aceptación:\n- Bloquear exige motivo.\n- Finalizar exige evidencia cuando la política lo indique.\n- La política selecciona columnas de espera, aprobación y rechazo.\n- Rechazar exige comentario.\n- Borrar una columna usada obliga a reconfigurar la política."
+      "body": "Aplicar políticas de bloqueo, evidencia y aprobación por proyecto. La aprobación o el rechazo corresponde a un administrador autorizado.\n\nCriterios de aceptación:\n- Bloquear exige motivo.\n- Finalizar exige evidencia cuando la política lo indique.\n- La política selecciona columnas de espera, aprobación y rechazo.\n- No existe asignación de supervisor o validador.\n- Rechazar exige comentario.\n- Borrar una columna usada obliga a reconfigurar la política."
     },
     {
       "key": "E4-I7",
@@ -285,7 +285,7 @@
       "epic": "E6",
       "title": "Construir formularios, plantillas y envíos",
       "labels": ["ui", "domain", "priority:high", "size:L"],
-      "body": "Implementar constructor, vista previa, publicación simulada y las cinco plantillas iniciales.\n\nCriterios de aceptación:\n- Soporta todos los tipos de campo del PRD y obligatoriedad.\n- Un envío puede crear una tarea en destino configurado.\n- Formularios publicados validan datos con Zod."
+      "body": "Implementar constructor, vista previa, publicación simulada y las cinco plantillas iniciales. Los formularios específicos de citas y facturas se implementan en issues separados.\n\nCriterios de aceptación:\n- Soporta todos los tipos de campo del PRD y obligatoriedad.\n- Un envío puede crear una tarea en destino configurado.\n- Formularios publicados validan datos con Zod.\n- El motor permite montar formularios específicos en rutas independientes."
     },
     {
       "key": "E6-I3",
@@ -307,6 +307,20 @@
       "title": "Definir contratos HTTP/OpenAPI y adaptador HTTP inicial",
       "labels": ["integration", "data", "domain", "priority:high", "size:L"],
       "body": "Formalizar endpoints, consultas, errores, paginación, concurrencia e idempotencia.\n\nCriterios de aceptación:\n- Contratos usan Zod y coinciden con las interfaces del repositorio.\n- Incluyen `phId`, fechas ISO, cursor, version/ETag y errores uniformes.\n- Sustituir el adaptador local no cambia las vistas."
+    },
+    {
+      "key": "E6-I6",
+      "epic": "E6",
+      "title": "Crear formulario independiente para agendar citas con administración",
+      "labels": ["ui", "domain", "responsive", "priority:high", "size:M"],
+      "body": "Implementar el recorrido específico para solicitar una cita con administración como página independiente dentro de Next.js.\n\nCriterios de aceptación:\n- Tiene una ruta propia, compartible y vinculada al contexto del PH.\n- Solicita RUC, DV y nombre de la persona que asistirá.\n- Permite seleccionar día y hora mediante un control de calendario accesible.\n- Valida con Zod y muestra carga, éxito y error recuperable.\n- Las reglas exactas de RUC/DV y disponibilidad quedan configurables hasta su definición final."
+    },
+    {
+      "key": "E6-I7",
+      "epic": "E6",
+      "title": "Crear formulario independiente para envío de facturas",
+      "labels": ["ui", "domain", "data", "priority:high", "size:M"],
+      "body": "Implementar el recorrido específico para enviar facturas como página independiente dentro de Next.js.\n\nCriterios de aceptación:\n- Tiene una ruta propia, compartible y vinculada al contexto del PH.\n- Permite adjuntar o representar la factura fiscal de forma simulada.\n- Solicita precio e ITBMS y valida importes con Zod.\n- Muestra carga, éxito y error recuperable.\n- La tasa, el cálculo y las reglas fiscales exactas quedan configurables hasta su definición final."
     },
     {
       "key": "E7-I1",

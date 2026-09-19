@@ -23,7 +23,7 @@ La validación será una política configurable por proyecto:
 - `validationColumnId`: columna a la que llega el trabajo pendiente de revisión.
 - `approvedColumnId`: columna de destino al aprobar, normalmente una columna `DONE`.
 - `rejectedColumnId`: columna activa a la que vuelve el trabajo rechazado.
-- `validatorStrategy`: persona específica, líder de equipo o rol supervisor.
+- La aprobación o el rechazo corresponde a cualquier administrador autorizado del PH.
 
 El sistema sugerirá crear una columna “Por validar” para las plantillas que requieran aprobación, pero el usuario podrá renombrarla, moverla o reemplazarla. Si intenta borrar una columna usada por la política, deberá elegir otra antes de continuar. La categoría semántica seguirá limitada a `TODO`, `IN_PROGRESS`, `BLOCKED` y `DONE`; “Por validar” será normalmente `IN_PROGRESS`.
 
@@ -31,25 +31,34 @@ El sistema sugerirá crear una columna “Por validar” para las plantillas que
 
 Se usarán Inter, los tokens de color y la dirección visual especificados en el PRD. El logotipo inicial será un recurso genérico y reemplazable, sin incorporar marcas de terceros.
 
+### Cambios incorporados del PRD
+
+- Gestión administrativa ya no incluye “Contratos y renovaciones” en su alcance inicial.
+- Gestión de contabilidad incluye “Seguimientos de cobro”.
+- La demo mínima incluye tres proyectos —al menos uno por módulo—, dos equipos, cuatro personas y dos tableros, conservando dos PH y datos suficientes para probar aislamiento, roles, estados e informes.
+- Formularios incluye dos recorridos específicos: agendar una cita con administración y enviar una factura.
+- Los formularios específicos se implementarán como páginas independientes dentro de la aplicación Next.js, con rutas propias y posibilidad de compartir el enlace. No se generarán documentos `.html` desconectados del sistema de rutas y repositorios.
+- Los roles de supervisor y validador se eliminan. El administrador absorbe la revisión de evidencias y la aprobación o rechazo, y `validatorId` desaparece del modelo.
+
 ## Matriz de permisos propuesta para la demo
 
 La autorización se evaluará por acción y recurso, además de filtrar siempre por `phId`.
 
-| Acción | Administrador | Supervisor | Colaborador |
-|---|---:|---:|---:|
-| Ver módulos, proyectos y tableros autorizados | Sí, todo el PH | Solo asignados | Solo asignados |
-| Gestionar proyectos, tableros, columnas y políticas | Sí | No | No |
-| Gestionar personas, equipos y membresías | Sí | Consulta de sus equipos | No |
-| Crear tareas | Sí | En proyectos asignados | Solo si el proyecto lo permite |
-| Editar cualquier tarea del alcance | Sí | En sus equipos/proyectos | No |
-| Editar tareas propias | Sí | Sí | Campos operativos permitidos |
-| Asignar o reasignar responsables | Sí | En sus equipos | No |
-| Cambiar estado, comentar y adjuntar evidencia | Sí | En su alcance | En tareas asignadas |
-| Informar bloqueo | Sí | Sí | En tareas asignadas; exige motivo |
-| Aprobar o rechazar validaciones | Sí | Si es validador o líder autorizado | No |
-| Ver informes | Todo el PH | Sus proyectos/equipos | Resumen personal |
-| Gestionar documentos, formularios y proveedores | Sí | Uso/consulta en su alcance | Uso autorizado |
-| Archivar o restaurar entidades | Sí | No | No |
+| Acción | Administrador | Colaborador |
+|---|---:|---:|
+| Ver módulos, proyectos y tableros autorizados | Sí, todo el PH | Solo asignados |
+| Gestionar proyectos, tableros, columnas y políticas | Sí | No |
+| Gestionar personas, equipos y membresías | Sí | No |
+| Crear tareas | Sí | Solo si el proyecto lo permite |
+| Editar cualquier tarea del alcance | Sí | No |
+| Editar tareas propias | Sí | Campos operativos permitidos |
+| Asignar o reasignar responsables | Sí | No |
+| Cambiar estado, comentar y adjuntar evidencia | Sí | En tareas asignadas |
+| Informar bloqueo | Sí | En tareas asignadas; exige motivo |
+| Revisar evidencias y aprobar o rechazar validaciones | Sí | No |
+| Ver informes | Todo el PH | Resumen personal |
+| Gestionar documentos, formularios y proveedores | Sí | Uso autorizado |
+| Archivar o restaurar entidades | Sí | No |
 
 Esta matriz queda como comportamiento de demostración. Antes del backend deben definirse permisos granulares, herencia de permisos, excepciones por usuario y reglas para colaboradores que crean tareas.
 
@@ -116,7 +125,7 @@ Esta matriz queda como comportamiento de demostración. Antes del backend deben 
 ### E6 — Recursos e integraciones preparadas
 
 1. Documentos con metadatos, carga/descarga y vista previa simuladas.
-2. Constructor, plantillas, publicación y envíos de formularios.
+2. Constructor, plantillas, publicación y envíos de formularios, incluyendo páginas independientes para agendar citas y enviar facturas.
 3. Catálogo de proveedores y relaciones con trabajo/recursos.
 4. Centro de notificaciones y líneas de actividad.
 5. Contratos HTTP/OpenAPI esperados y adaptador HTTP inicial.
@@ -142,6 +151,8 @@ Algunas tareas de E5 y E6 pueden avanzar en paralelo después de estabilizar el 
 ## Pendientes por definir antes del backend
 
 - Matriz definitiva de permisos y excepciones por proyecto/tablero.
+- Confirmar que “varios tableros (2)” significa exactamente dos tableros como mínimo.
+- Confirmar que “HTML aparte” significa páginas con rutas independientes dentro de Next.js y no archivos HTML desconectados de la aplicación.
 - Herencia de permisos y precedencia entre rol, membresía y asignación.
 - Nombre comercial, logotipo y activos finales de PH Platform.
 - Contrato exacto del maestro de proveedores.
@@ -149,6 +160,7 @@ Algunas tareas de E5 y E6 pueden avanzar en paralelo después de estabilizar el 
 - Zona horaria por PH y reglas de días hábiles/feriados.
 - Semántica del porcentaje de avance del cronograma.
 - Reglas definitivas de recurrencia, edición de series y ocurrencias.
+- Reglas fiscales y formato de RUC/DV, factura fiscal, precio e ITBMS para los formularios específicos.
 - Exportación CSV y alcance de importaciones.
 - Volúmenes esperados para paginación, virtualización y rendimiento.
 

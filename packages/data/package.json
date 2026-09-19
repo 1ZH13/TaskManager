@@ -5,6 +5,6 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "scripts": { "build": "tsc --noEmit", "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "vitest run --passWithNoTests" },
-  "dependencies": { "@task-manager/shared": "workspace:*" },
+  "dependencies": { "@task-manager/domain": "workspace:*", "@task-manager/shared": "workspace:*" },
   "devDependencies": { "typescript": "^5.9.3", "vitest": "^4.0.18" }
 }

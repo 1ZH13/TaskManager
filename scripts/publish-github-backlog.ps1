@@ -7,6 +7,11 @@ $manifestPath = Join-Path $PSScriptRoot "..\.github\backlog.json"
 $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
 
 gh auth status --hostname github.com | Out-Null
+$existingIssues = @(gh issue list `
+  --repo $Repository `
+  --state all `
+  --limit 1000 `
+  --json number,title,url | ConvertFrom-Json)
 
 foreach ($label in $manifest.labels) {
   gh label create $label.name `
@@ -18,15 +23,14 @@ foreach ($label in $manifest.labels) {
 
 $epicUrls = @{}
 foreach ($epic in $manifest.epics) {
-  $existingUrl = gh issue list `
-    --repo $Repository `
-    --state all `
-    --search ('"' + $epic.title + '" in:title') `
-    --json title,url `
-    --jq ('.[] | select(.title == "' + ($epic.title -replace '"', '\"') + '") | .url')
+  $existing = $existingIssues | Where-Object { $_.title -eq $epic.title } | Select-Object -First 1
 
-  if ($existingUrl) {
-    $epicUrls[$epic.key] = ($existingUrl | Select-Object -First 1)
+  if ($existing) {
+    gh issue edit $existing.number `
+      --repo $Repository `
+      --body $epic.body `
+      --add-label ($epic.labels -join ',') | Out-Null
+    $epicUrls[$epic.key] = $existing.url
     continue
   }
 
@@ -38,19 +42,18 @@ foreach ($epic in $manifest.epics) {
 }
 
 foreach ($issue in $manifest.issues) {
-  $existingUrl = gh issue list `
-    --repo $Repository `
-    --state all `
-    --search ('"' + $issue.title + '" in:title') `
-    --json title,url `
-    --jq ('.[] | select(.title == "' + ($issue.title -replace '"', '\"') + '") | .url')
+  $epicUrl = $epicUrls[$issue.epic]
+  $body = "Épico: $epicUrl`n`n$($issue.body)"
+  $existing = $existingIssues | Where-Object { $_.title -eq $issue.title } | Select-Object -First 1
 
-  if ($existingUrl) {
+  if ($existing) {
+    gh issue edit $existing.number `
+      --repo $Repository `
+      --body $body `
+      --add-label ($issue.labels -join ',') | Out-Null
     continue
   }
 
-  $epicUrl = $epicUrls[$issue.epic]
-  $body = "Épico: $epicUrl`n`n$($issue.body)"
   gh issue create `
     --repo $Repository `
     --title $issue.title `
