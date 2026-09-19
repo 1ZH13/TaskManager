@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'SUPERVISOR' | 'COLLABORATOR';
+export type Role = 'ADMIN' | 'COLLABORATOR';
 
 export type Action =
   | 'project.read'
@@ -25,7 +25,6 @@ export interface Actor {
   status: 'ACTIVE' | 'INACTIVE';
   projectIds: readonly string[];
   teamIds: readonly string[];
-  ledTeamIds: readonly string[];
 }
 
 export interface AuthorizationResource {
@@ -33,7 +32,6 @@ export interface AuthorizationResource {
   projectId?: string;
   teamId?: string;
   assigneeId?: string;
-  validatorId?: string;
   projectAllowsCollaboratorCreate?: boolean;
 }
 
@@ -76,16 +74,6 @@ export function can(actor: Actor, action: Action, resource: AuthorizationResourc
   }
 
   const inScope = isInScope(actor, resource);
-
-  if (actor.role === 'SUPERVISOR') {
-    if (!inScope) return false;
-
-    if (action === 'task.validate') {
-      return resource.validatorId === actor.id || (resource.teamId !== undefined && actor.ledTeamIds.includes(resource.teamId));
-    }
-
-    return action !== 'project.manage' && action !== 'board.manage' && action !== 'people.manage' && action !== 'people.readNationalId' && action !== 'team.manage' && action !== 'entity.archive';
-  }
 
   if (!inScope || action === 'task.validate' || action === 'task.assign') {
     return false;

@@ -8,7 +8,6 @@ const actor: Actor = {
   status: 'ACTIVE',
   projectIds: ['project-a'],
   teamIds: ['team-a'],
-  ledTeamIds: [],
 };
 
 const resource: AuthorizationResource = {
@@ -29,14 +28,6 @@ describe('can', () => {
     expect(can({ ...actor, role: 'ADMIN', projectIds: [], teamIds: [] }, 'people.readNationalId', resource)).toBe(true);
   });
 
-  it('limita al supervisor a su alcance y a su validación asignada o equipo liderado', () => {
-    const supervisor: Actor = { ...actor, role: 'SUPERVISOR', id: 'supervisor-1', ledTeamIds: ['team-a'] };
-    expect(can(supervisor, 'task.update', resource)).toBe(true);
-    expect(can(supervisor, 'task.validate', resource)).toBe(true);
-    expect(can(supervisor, 'task.update', { ...resource, projectId: 'project-b' })).toBe(false);
-    expect(can(supervisor, 'people.readNationalId', resource)).toBe(false);
-  });
-
   it('solo permite al colaborador operar su propia tarea', () => {
     expect(can(actor, 'task.move', resource)).toBe(true);
     expect(can(actor, 'task.block', resource)).toBe(true);
@@ -49,9 +40,8 @@ describe('can', () => {
     expect(can(actor, 'task.create', { ...resource, projectAllowsCollaboratorCreate: true })).toBe(true);
   });
 
-  it('solo permite validar al supervisor elegido cuando no lidera el equipo', () => {
-    const supervisor: Actor = { ...actor, role: 'SUPERVISOR', id: 'supervisor-1', ledTeamIds: [] };
-    expect(can(supervisor, 'task.validate', { ...resource, validatorId: 'supervisor-1' })).toBe(true);
-    expect(can(supervisor, 'task.validate', resource)).toBe(false);
+  it('reserva la validación y el identificador personal para administradores', () => {
+    expect(can(actor, 'task.validate', resource)).toBe(false);
+    expect(can(actor, 'people.readNationalId', resource)).toBe(false);
   });
 });

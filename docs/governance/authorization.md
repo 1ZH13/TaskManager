@@ -13,28 +13,28 @@
 
 ## Matriz de capacidades de demo
 
-| Recurso / acción | Administrador | Supervisor | Colaborador |
-| --- | --- | --- | --- |
-| Proyectos y tableros | Gestiona todo el PH | Consulta los asignados | Consulta los autorizados |
-| Columnas y políticas | Gestiona | Denegado | Denegado |
-| Crear y asignar tareas | Sí | En su alcance | Solo si el proyecto lo permite |
-| Editar tarea propia | Sí | Sí | Campos operativos autorizados |
-| Editar tarea de otro | Sí | En su alcance | Denegado |
-| Mover, comentar o adjuntar evidencia | Sí | En su alcance | Solo tareas asignadas |
-| Bloquear tarea | Sí | En su alcance; exige motivo | Solo tareas asignadas; exige motivo |
-| Aprobar o rechazar | Sí | Si es validador o líder autorizado | Denegado |
-| Personas y equipos | Gestiona | Consulta de sus equipos | Denegado |
-| Identificador personal completo | Cuando el flujo lo exige | Denegado | Denegado |
-| Informes | Todo el PH | Proyectos y equipos asignados | Resumen personal |
-| Documentos, formularios y proveedores | Gestiona | Usa o consulta en alcance | Uso autorizado |
-| Archivar o restaurar | Sí | Denegado | Denegado |
+| Recurso / acción | Administrador | Colaborador |
+| --- | --- | --- |
+| Proyectos y tableros | Gestiona todo el PH | Consulta los autorizados |
+| Columnas y políticas | Gestiona | Denegado |
+| Crear y asignar tareas | Sí | Solo si el proyecto lo permite |
+| Editar tarea propia | Sí | Campos operativos autorizados |
+| Editar tarea de otro | Sí | Denegado |
+| Mover, comentar o adjuntar evidencia | Sí | Solo tareas asignadas |
+| Bloquear tarea | Sí | Solo tareas asignadas; exige motivo |
+| Aprobar o rechazar | Sí | Denegado |
+| Personas y equipos | Gestiona | Denegado |
+| Identificador personal completo | Cuando el flujo lo exige | Denegado |
+| Informes | Todo el PH | Resumen personal |
+| Documentos, formularios y proveedores | Gestiona | Uso autorizado |
+| Archivar o restaurar | Sí | Denegado |
 
 ## Contrato puro para E1/E2
 
 La implementación vivirá en `packages/domain` y no conocerá React, rutas ni almacenamiento.
 
 ```ts
-export type Role = 'ADMIN' | 'SUPERVISOR' | 'COLLABORATOR';
+export type Role = 'ADMIN' | 'COLLABORATOR';
 export type Action =
   | 'project.read' | 'project.manage' | 'board.manage' | 'task.create'
   | 'task.read' | 'task.update' | 'task.assign' | 'task.move'
@@ -55,7 +55,6 @@ export interface AuthorizationResource {
   projectId?: string;
   teamId?: string;
   assigneeId?: string;
-  validatorId?: string;
   projectAllowsCollaboratorCreate?: boolean;
 }
 
@@ -66,14 +65,13 @@ export function can(
 ): boolean;
 ```
 
-El primer guard obligatorio de `can` será `actor.status === 'ACTIVE' && actor.phId === resource.phId`. Después se evalúan rol, propiedad de la tarea, asignación de proyecto/equipo y, para validar, `validatorId` o liderazgo del equipo. La API devuelve solo `boolean`; las capas de aplicación pueden acompañarlo con un motivo localizado para explicar una denegación.
+El primer guard obligatorio de `can` será `actor.status === 'ACTIVE' && actor.phId === resource.phId`. Después se evalúan rol, propiedad de la tarea y asignación de proyecto/equipo. La validación es exclusiva de administradores. La API devuelve solo `boolean`; las capas de aplicación pueden acompañarlo con un motivo localizado para explicar una denegación.
 
 ## Casos de prueba mínimos
 
 - Actor inactivo o de otro PH: denegado para toda acción.
 - Administrador del mismo PH: permitido para gestión dentro del PH.
-- Supervisor fuera del proyecto o equipo: denegado.
 - Colaborador no asignado: no puede mover ni bloquear la tarea.
 - Colaborador asignado: puede mover y bloquear su tarea, pero no asignarla ni validarla.
-- Validador explícito o líder autorizado: puede validar dentro de su PH.
+- Solo un administrador del mismo PH puede validar.
 - Lectura de identificador personal: solo administrador y solo recurso del mismo PH.

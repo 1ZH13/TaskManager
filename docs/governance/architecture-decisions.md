@@ -22,11 +22,11 @@
 
 ## ADR-003 — Validación configurable por proyecto
 
-**Decisión.** La política del proyecto contiene `requiresValidation`, `validationColumnId`, `approvedColumnId`, `rejectedColumnId` y `validatorStrategy` (persona, líder de equipo o rol supervisor).
+**Decisión.** La política del proyecto contiene `requiresValidation`, `validationColumnId`, `approvedColumnId` y `rejectedColumnId`. La aprobación corresponde a administradores autorizados del mismo PH.
 
-**Motivo.** La aprobación de limpieza, mantenimiento y contabilidad no sigue necesariamente el mismo flujo.
+**Motivo.** La aprobación de limpieza, mantenimiento y contabilidad no sigue necesariamente el mismo flujo, pero la autorización queda centralizada en administración.
 
-**Consecuencias.** Eliminar una columna usada por una política exige seleccionar un reemplazo y reconfigurar la política en la misma operación. Un rechazo requiere comentario; una transición a bloqueo requiere motivo.
+**Consecuencias.** Eliminar una columna usada por una política exige seleccionar un reemplazo y reconfigurar la política en la misma operación. Un rechazo requiere comentario; una transición a bloqueo requiere motivo. No se persisten validadores individuales ni roles supervisores.
 
 ## ADR-004 — Zod como fuente de verdad de contratos
 

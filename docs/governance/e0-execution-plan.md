@@ -32,7 +32,7 @@ E0-I1 fija los límites que usa la autorización. E0-I2 y E0-I3 pueden finalizar
 
 1. Definir tipos puros para actor, acción y recurso en `packages/domain`.
 2. Implementar `can(actor, action, resource)` con guard inicial de actor activo y mismo `phId`.
-3. Incorporar alcance por proyecto/equipo, propiedad de tarea y validador/líder de equipo.
+3. Incorporar alcance por proyecto/equipo, propiedad de tarea y validación exclusiva de administración.
 4. Exportar la API desde la entrada pública del paquete y documentar la matriz de UX.
 5. Añadir pruebas de permitidos, denegados y cruce entre PH.
 
