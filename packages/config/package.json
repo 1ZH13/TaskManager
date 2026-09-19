@@ -1,0 +1,7 @@
+{
+  "name": "@task-manager/config",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": { "build": "tsc --noEmit", "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "vitest run --passWithNoTests" },
+  "devDependencies": { "typescript": "^5.9.3", "vitest": "^4.0.18" }
+}

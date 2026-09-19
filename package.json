@@ -1,0 +1,25 @@
+{
+  "name": "task-manager",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.4.1",
+    "@commitlint/config-conventional": "^20.4.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.6.2",
+    "turbo": "^2.7.4",
+    "typescript": "^5.9.3"
+  },
+  "lint-staged": { "*.{ts,tsx,js,mjs,json,css,md}": "prettier --write" }
+}

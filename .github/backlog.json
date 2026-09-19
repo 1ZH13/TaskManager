@@ -1,0 +1,361 @@
+{
+  "labels": [
+    { "name": "epic", "color": "5319E7", "description": "Agrupa un incremento completo del producto" },
+    { "name": "foundation", "color": "1D76DB", "description": "Base técnica, arquitectura y herramientas" },
+    { "name": "domain", "color": "0E8A16", "description": "Modelo de dominio, reglas y contratos" },
+    { "name": "data", "color": "006B75", "description": "Repositorios, persistencia, semillas e integración" },
+    { "name": "ui", "color": "FBCA04", "description": "Componentes e interfaz de usuario" },
+    { "name": "accessibility", "color": "D4C5F9", "description": "Accesibilidad y operación por teclado" },
+    { "name": "responsive", "color": "C5DEF5", "description": "Diseño adaptable y experiencia móvil" },
+    { "name": "testing", "color": "BFD4F2", "description": "Pruebas y aseguramiento de calidad" },
+    { "name": "security", "color": "B60205", "description": "Permisos, privacidad y aislamiento por PH" },
+    { "name": "reports", "color": "C2E0C6", "description": "Métricas, selectores e informes" },
+    { "name": "integration", "color": "0052CC", "description": "Contratos e integraciones futuras" },
+    { "name": "decision-needed", "color": "D93F0B", "description": "Decisión de producto pendiente antes del backend" },
+    { "name": "priority:critical", "color": "B60205", "description": "Bloquea una parte importante del producto" },
+    { "name": "priority:high", "color": "D93F0B", "description": "Alta prioridad dentro del incremento" },
+    { "name": "priority:medium", "color": "FBCA04", "description": "Prioridad normal" },
+    { "name": "size:S", "color": "C2E0C6", "description": "Trabajo pequeño" },
+    { "name": "size:M", "color": "BFDADC", "description": "Trabajo mediano" },
+    { "name": "size:L", "color": "D4C5F9", "description": "Trabajo grande que debe dividirse si crece" }
+  ],
+  "epics": [
+    {
+      "key": "E0",
+      "title": "[Epic E0] Gobierno técnico y decisiones de producto",
+      "labels": ["epic", "foundation", "priority:critical"],
+      "body": "Objetivo: fijar las decisiones transversales que condicionan toda la implementación.\n\nAlcance:\n- Registro de decisiones de arquitectura y producto.\n- Matriz de permisos de demostración.\n- Definition of Done y estrategia de calidad.\n\nTerminado cuando las decisiones adoptadas y los pendientes antes del backend están documentados y trazables."
+    },
+    {
+      "key": "E1",
+      "title": "[Epic E1] Base del monorepo y sistema visual",
+      "labels": ["epic", "foundation", "ui", "priority:critical"],
+      "body": "Objetivo: entregar una base compilable, probada, localizada y adaptable sobre la que se construirá el producto.\n\nTerminado cuando el monorepo, contratos base, sistema visual, App Shell y verificaciones automáticas funcionan en conjunto."
+    },
+    {
+      "key": "E2",
+      "title": "[Epic E2] Datos locales, contexto PH y permisos",
+      "labels": ["epic", "data", "security", "priority:critical"],
+      "body": "Objetivo: crear la capa reemplazable de datos y garantizar el aislamiento por propiedad horizontal.\n\nTerminado cuando dos PH pueden demostrarse sin cruces, los cambios persisten y los permisos simulados afectan las vistas."
+    },
+    {
+      "key": "E3",
+      "title": "[Epic E3] Organización de proyectos, personas y equipos",
+      "labels": ["epic", "domain", "ui", "priority:high"],
+      "body": "Objetivo: implementar la estructura organizativa del PH y sus tres módulos de gestión.\n\nTerminado cuando proyectos, personas, equipos y asociaciones pueden administrarse respetando permisos y contexto."
+    },
+    {
+      "key": "E4",
+      "title": "[Epic E4] Trabajo principal: tableros y tareas",
+      "labels": ["epic", "domain", "ui", "priority:critical"],
+      "body": "Objetivo: completar el núcleo operativo del producto.\n\nTerminado cuando tableros, columnas y tareas admiten los recorridos completos, accesibles y persistentes definidos en el PRD."
+    },
+    {
+      "key": "E5",
+      "title": "[Epic E5] Vistas sincronizadas y recurrencias",
+      "labels": ["epic", "domain", "ui", "priority:high"],
+      "body": "Objetivo: representar las mismas tareas en lista, calendario y cronograma, incluyendo recurrencias.\n\nTerminado cuando cualquier modificación se refleja consistentemente en todas las vistas."
+    },
+    {
+      "key": "E6",
+      "title": "[Epic E6] Recursos e integraciones preparadas",
+      "labels": ["epic", "integration", "ui", "priority:high"],
+      "body": "Objetivo: completar documentos, formularios, proveedores, actividad y contratos del backend futuro.\n\nTerminado cuando los recorridos funcionan con simulación y sus fronteras de integración están documentadas."
+    },
+    {
+      "key": "E7",
+      "title": "[Epic E7] Informes, endurecimiento y entrega",
+      "labels": ["epic", "reports", "testing", "priority:critical"],
+      "body": "Objetivo: cerrar la primera entrega completa con informes derivados, accesibilidad, responsive y pruebas integrales.\n\nTerminado cuando se cumplen los 15 criterios generales de aceptación del PRD."
+    }
+  ],
+  "issues": [
+    {
+      "key": "E0-I1",
+      "epic": "E0",
+      "title": "Documentar decisiones de arquitectura y pendientes de producto",
+      "labels": ["foundation", "decision-needed", "priority:critical", "size:S"],
+      "body": "Registrar relaciones muchos-a-muchos, flujo configurable de validación, identidad provisional y decisiones pendientes.\n\nCriterios de aceptación:\n- Las decisiones adoptadas incluyen su motivo y consecuencias.\n- Los pendientes no bloqueantes están separados de los bloqueantes.\n- El documento enlaza al PRD y se mantiene versionado."
+    },
+    {
+      "key": "E0-I2",
+      "epic": "E0",
+      "title": "Definir matriz de permisos y evaluador de capacidades",
+      "labels": ["domain", "security", "priority:critical", "size:M"],
+      "body": "Formalizar las capacidades de administrador, supervisor y colaborador por recurso y acción.\n\nCriterios de aceptación:\n- La matriz cubre proyectos, tableros, tareas, validaciones, informes y recursos.\n- Existe una API pura `can(actor, action, resource)`.\n- Las reglas siempre consideran `phId`.\n- Hay pruebas de permitidos y denegados."
+    },
+    {
+      "key": "E0-I3",
+      "epic": "E0",
+      "title": "Definir Definition of Done y estrategia de calidad",
+      "labels": ["foundation", "testing", "priority:high", "size:S"],
+      "body": "Definir controles mínimos por issue e incremento.\n\nCriterios de aceptación:\n- Incluye compilación, lint, tipos, pruebas, teclado, responsive y aislamiento PH.\n- Distingue pruebas unitarias, de componentes e integración.\n- Define evidencia necesaria para cerrar un issue."
+    },
+    {
+      "key": "E1-I1",
+      "epic": "E1",
+      "title": "Inicializar monorepo con pnpm, Turborepo y Next.js",
+      "labels": ["foundation", "priority:critical", "size:M"],
+      "body": "Crear `apps/web` y paquetes `config`, `domain`, `shared`, `ui` y `data` con las versiones del PRD.\n\nCriterios de aceptación:\n- Instalación y scripts funcionan con pnpm 11 y Node 24.\n- TypeScript estricto compila todo el workspace.\n- Existen scripts raíz para dev, build, lint, typecheck y test."
+    },
+    {
+      "key": "E1-I2",
+      "epic": "E1",
+      "title": "Crear contratos Zod y modelo de dominio base",
+      "labels": ["domain", "priority:critical", "size:L"],
+      "body": "Implementar entidades principales y asociaciones con Zod 4 como fuente de tipos.\n\nCriterios de aceptación:\n- Todas las entidades de negocio aplicables incluyen `id`, `phId`, fechas y versión.\n- Incluye ProjectTeam, ProjectMember, BoardTeam y TeamMembership.\n- Los tipos se infieren mediante `z.infer`.\n- Hay pruebas de validación y refinamientos clave."
+    },
+    {
+      "key": "E1-I3",
+      "epic": "E1",
+      "title": "Implementar tokens, componentes base y logotipo provisional",
+      "labels": ["ui", "accessibility", "priority:high", "size:L"],
+      "body": "Construir la base visual con Inter, Tailwind 4 y los tokens del PRD.\n\nCriterios de aceptación:\n- Colores, tipografía, espaciado, radios y focos usan variables CSS.\n- Los controles base cumplen tamaños táctiles y contraste.\n- El logotipo genérico puede sustituirse desde un único recurso."
+    },
+    {
+      "key": "E1-I4",
+      "epic": "E1",
+      "title": "Crear App Shell adaptable y navegación localizada",
+      "labels": ["ui", "responsive", "accessibility", "priority:high", "size:L"],
+      "body": "Implementar sidebar, encabezado, drawer móvil y rutas con `es-PA`.\n\nCriterios de aceptación:\n- La navegación global y de proyecto refleja la pestaña activa en la URL.\n- Sidebar expandido/colapsado y drawer móvil son utilizables por teclado.\n- Textos visibles proceden de next-intl."
+    },
+    {
+      "key": "E1-I5",
+      "epic": "E1",
+      "title": "Configurar CI, pruebas y verificaciones automáticas",
+      "labels": ["testing", "foundation", "priority:high", "size:M"],
+      "body": "Configurar Vitest, Testing Library, jsdom, ESLint, Prettier, Husky y commitlint.\n\nCriterios de aceptación:\n- CI ejecuta lint, typecheck, test y build.\n- Las pruebas no dependen de la zona horaria del equipo.\n- Los fallos bloquean la verificación."
+    },
+    {
+      "key": "E2-I1",
+      "epic": "E2",
+      "title": "Definir repositorios y proveedor de dependencias",
+      "labels": ["data", "domain", "integration", "priority:critical", "size:L"],
+      "body": "Crear interfaces de repositorio completas y un mecanismo de inyección para las vistas.\n\nCriterios de aceptación:\n- Las interfaces cubren los recorridos de todas las fases.\n- Ningún componente importa localStorage, IndexedDB o fetch directamente.\n- Los errores y conflictos tienen contratos uniformes."
+    },
+    {
+      "key": "E2-I2",
+      "epic": "E2",
+      "title": "Implementar persistencia local versionada y datos semilla",
+      "labels": ["data", "testing", "priority:critical", "size:L"],
+      "body": "Crear el repositorio local, migraciones y semillas deterministas del PRD.\n\nCriterios de aceptación:\n- Incluye al menos dos PH, cuatro proyectos, seis equipos, doce personas y datos para informes.\n- Los cambios sobreviven una recarga.\n- Restablecer demo reproduce los mismos identificadores y datos.\n- Migraciones y recuperación de datos corruptos están probadas."
+    },
+    {
+      "key": "E2-I3",
+      "epic": "E2",
+      "title": "Implementar selector de PH y aislamiento de contexto",
+      "labels": ["security", "data", "ui", "priority:critical", "size:M"],
+      "body": "Construir el cambio de PH, persistencia del último contexto y protección de rutas.\n\nCriterios de aceptación:\n- Cambiar de PH reemplaza todos los datos visibles.\n- Una URL no autorizada muestra acceso denegado y ofrece un contexto permitido.\n- Consultas y mutaciones rechazan IDs de otro PH.\n- Las pruebas cubren intentos de cruce."
+    },
+    {
+      "key": "E2-I4",
+      "epic": "E2",
+      "title": "Implementar usuarios y permisos simulados de demostración",
+      "labels": ["security", "ui", "priority:critical", "size:L"],
+      "body": "Aplicar la matriz de permisos y permitir cambiar de persona/rol en modo demo.\n\nCriterios de aceptación:\n- Las vistas y acciones responden al actor seleccionado.\n- Los controles denegados se ocultan o explican por qué están deshabilitados.\n- El repositorio también valida permisos; la UI no es la única barrera."
+    },
+    {
+      "key": "E2-I5",
+      "epic": "E2",
+      "title": "Crear estados globales y restauración de la demo",
+      "labels": ["ui", "data", "priority:high", "size:M"],
+      "body": "Crear patrones reutilizables para carga, vacío, sin resultados, error, conflicto y éxito.\n\nCriterios de aceptación:\n- Cada estado tiene una acción de recuperación cuando aplica.\n- Los conflictos de versión permiten recargar o reintentar.\n- Restablecer datos requiere confirmación y solo aparece en desarrollo/demo."
+    },
+    {
+      "key": "E3-I1",
+      "epic": "E3",
+      "title": "Implementar proyectos, plantillas y archivado",
+      "labels": ["domain", "ui", "priority:high", "size:L"],
+      "body": "Crear CRUD de proyectos para los tres módulos y Kanban vacío.\n\nCriterios de aceptación:\n- Se gestionan nombre, clave, descripción, icono, color, fechas y equipos.\n- Archivar y restaurar respeta permisos.\n- Las claves visibles son únicas dentro del PH."
+    },
+    {
+      "key": "E3-I2",
+      "epic": "E3",
+      "title": "Implementar gestión de personas y privacidad del identificador",
+      "labels": ["domain", "ui", "security", "priority:high", "size:M"],
+      "body": "Crear fichas, listado y estados de personas.\n\nCriterios de aceptación:\n- La cédula completa no aparece en tarjetas generales.\n- Solo permisos administrativos revelan el identificador donde corresponde.\n- Estado, rol, supervisor, equipos y carga resumida son visibles según alcance."
+    },
+    {
+      "key": "E3-I3",
+      "epic": "E3",
+      "title": "Implementar equipos, membresías y asociaciones",
+      "labels": ["domain", "ui", "priority:high", "size:L"],
+      "body": "Crear CRUD de equipos y asociaciones con personas, proyectos y tableros.\n\nCriterios de aceptación:\n- Una persona puede pertenecer a varios equipos.\n- Un proyecto y tablero pueden relacionarse con varios equipos.\n- Archivar no destruye el historial.\n- Se muestra líder, miembros, carga y pendientes."
+    },
+    {
+      "key": "E3-I4",
+      "epic": "E3",
+      "title": "Crear inicio del PH y navegación por módulos",
+      "labels": ["ui", "responsive", "priority:medium", "size:M"],
+      "body": "Construir el inicio contextual y páginas de gestión administrativa, operativa y contable.\n\nCriterios de aceptación:\n- Cada módulo muestra solo sus proyectos autorizados.\n- Accesos rápidos y métricas se derivan de los datos reales.\n- Funciona en escritorio y móvil."
+    },
+    {
+      "key": "E4-I1",
+      "epic": "E4",
+      "title": "Implementar CRUD de tableros y columnas semánticas",
+      "labels": ["domain", "ui", "priority:critical", "size:L"],
+      "body": "Crear tableros y columnas totalmente configurables.\n\nCriterios de aceptación:\n- Un tablero nuevo incluye las cuatro columnas predeterminadas.\n- Nombre, color, posición y categoría son editables.\n- Varias columnas pueden compartir categoría.\n- Nunca se permite un tablero sin columnas."
+    },
+    {
+      "key": "E4-I2",
+      "epic": "E4",
+      "title": "Reordenar y eliminar columnas de forma accesible",
+      "labels": ["ui", "accessibility", "domain", "priority:critical", "size:L"],
+      "body": "Implementar arrastre, controles de teclado y eliminación segura de columnas.\n\nCriterios de aceptación:\n- Todas las columnas, incluidas las iniciales, pueden moverse o eliminarse.\n- Una columna con tareas exige elegir destino.\n- Una columna usada en una política exige reemplazo.\n- Lectores de pantalla reciben anuncios del movimiento."
+    },
+    {
+      "key": "E4-I3",
+      "epic": "E4",
+      "title": "Implementar CRUD y detalle completo de tareas",
+      "labels": ["domain", "ui", "priority:critical", "size:L"],
+      "body": "Crear tareas, incidencias, subtareas, hitos y tareas recurrentes con su panel de detalle.\n\nCriterios de aceptación:\n- Se soportan los campos definidos en el PRD.\n- La clave legible se genera por proyecto sin colisiones.\n- Las mutaciones crean eventos de actividad.\n- Validaciones Zod y permisos se aplican antes de persistir."
+    },
+    {
+      "key": "E4-I4",
+      "epic": "E4",
+      "title": "Construir Kanban con movimiento y reordenamiento accesible",
+      "labels": ["ui", "accessibility", "priority:critical", "size:L"],
+      "body": "Implementar el tablero operativo con dnd-kit y alternativa por menú.\n\nCriterios de aceptación:\n- Las tareas se mueven entre columnas y dentro de ellas.\n- El movimiento persiste posiciones estables.\n- Existe acción equivalente sin arrastrar.\n- Filtros y posición se conservan al abrir/cerrar el detalle."
+    },
+    {
+      "key": "E4-I5",
+      "epic": "E4",
+      "title": "Añadir subtareas, comentarios, evidencias y actividad",
+      "labels": ["domain", "ui", "data", "priority:high", "size:L"],
+      "body": "Completar la colaboración y trazabilidad de una tarea.\n\nCriterios de aceptación:\n- Comentarios, archivos simulados y subtareas persisten.\n- Actividad registra creación, edición, asignación, movimiento y evidencia.\n- Los adjuntos se representan con metadatos y URL local segura."
+    },
+    {
+      "key": "E4-I6",
+      "epic": "E4",
+      "title": "Implementar bloqueos y flujo configurable de validación",
+      "labels": ["domain", "ui", "priority:critical", "size:L"],
+      "body": "Aplicar políticas de bloqueo, evidencia y aprobación por proyecto.\n\nCriterios de aceptación:\n- Bloquear exige motivo.\n- Finalizar exige evidencia cuando la política lo indique.\n- La política selecciona columnas de espera, aprobación y rechazo.\n- Rechazar exige comentario.\n- Borrar una columna usada obliga a reconfigurar la política."
+    },
+    {
+      "key": "E4-I7",
+      "epic": "E4",
+      "title": "Añadir búsqueda, filtros y agrupaciones del tablero",
+      "labels": ["ui", "domain", "priority:high", "size:M"],
+      "body": "Implementar búsqueda, filtros combinables y agrupación.\n\nCriterios de aceptación:\n- Filtra por responsable, equipo, prioridad, tipo, proveedor y fecha.\n- Agrupa por responsable, equipo, prioridad o tipo.\n- Los filtros compartibles se representan en la URL.\n- Restablecer filtros produce un estado determinista."
+    },
+    {
+      "key": "E5-I1",
+      "epic": "E5",
+      "title": "Crear lista configurable con edición rápida",
+      "labels": ["ui", "domain", "priority:high", "size:L"],
+      "body": "Construir la vista de lista con TanStack Table.\n\nCriterios de aceptación:\n- Columnas, orden y filtros son configurables.\n- Estado, responsable, prioridad y fechas admiten edición rápida.\n- Selección múltiple simulada respeta permisos."
+    },
+    {
+      "key": "E5-I2",
+      "epic": "E5",
+      "title": "Crear calendario mensual, semanal y agenda",
+      "labels": ["ui", "accessibility", "responsive", "priority:high", "size:L"],
+      "body": "Construir calendario con tareas programadas y panel sin programar.\n\nCriterios de aceptación:\n- Navega anterior, siguiente y hoy.\n- Arrastrar asigna o cambia fecha.\n- Existe alternativa accesible para cambiarla.\n- Atrasadas, bloqueadas y terminadas se distinguen sin depender solo del color."
+    },
+    {
+      "key": "E5-I3",
+      "epic": "E5",
+      "title": "Crear cronograma con dependencias, hitos y zoom",
+      "labels": ["ui", "domain", "responsive", "priority:high", "size:L"],
+      "body": "Construir la vista de cronograma tipo Gantt.\n\nCriterios de aceptación:\n- Muestra inicio, fin, fases, hitos, dependencias y alertas.\n- Zoom semanal, mensual y trimestral funciona.\n- Las fechas se editan mediante controles accesibles.\n- El avance se deriva de tareas, no de cifras independientes."
+    },
+    {
+      "key": "E5-I4",
+      "epic": "E5",
+      "title": "Implementar reglas y ocurrencias de recurrencia",
+      "labels": ["domain", "data", "priority:high", "size:L"],
+      "body": "Modelar recurrencias diarias, semanales, mensuales y personalizadas en el repositorio local.\n\nCriterios de aceptación:\n- Inicio y responsable/equipo son obligatorios.\n- Se admite fecha final o cantidad de repeticiones.\n- Próximas ocurrencias aparecen en las vistas relevantes.\n- La generación es determinista y está probada."
+    },
+    {
+      "key": "E5-I5",
+      "epic": "E5",
+      "title": "Unificar selectores entre tablero, lista, calendario y cronograma",
+      "labels": ["domain", "testing", "priority:critical", "size:M"],
+      "body": "Crear selectores puros compartidos para todas las representaciones.\n\nCriterios de aceptación:\n- Las vistas leen las mismas entidades y reglas de autorización.\n- Una mutación se refleja sin duplicar estado.\n- Pruebas demuestran consistencia entre vistas e informes."
+    },
+    {
+      "key": "E6-I1",
+      "epic": "E6",
+      "title": "Implementar documentos y archivos simulados",
+      "labels": ["ui", "data", "priority:high", "size:L"],
+      "body": "Crear lista/cuadrícula, carga, descarga, vista previa y eliminación simuladas.\n\nCriterios de aceptación:\n- Metadatos incluyen nombre, tipo, tamaño, responsable y fecha.\n- Documentos se relacionan con proyecto, tarea, proveedor o equipo.\n- Búsqueda, filtros y confirmación de eliminación funcionan."
+    },
+    {
+      "key": "E6-I2",
+      "epic": "E6",
+      "title": "Construir formularios, plantillas y envíos",
+      "labels": ["ui", "domain", "priority:high", "size:L"],
+      "body": "Implementar constructor, vista previa, publicación simulada y las cinco plantillas iniciales.\n\nCriterios de aceptación:\n- Soporta todos los tipos de campo del PRD y obligatoriedad.\n- Un envío puede crear una tarea en destino configurado.\n- Formularios publicados validan datos con Zod."
+    },
+    {
+      "key": "E6-I3",
+      "epic": "E6",
+      "title": "Implementar catálogo y referencias de proveedores",
+      "labels": ["integration", "ui", "data", "priority:high", "size:M"],
+      "body": "Crear catálogo simulado compatible con PH Platform.\n\nCriterios de aceptación:\n- Busca y consulta proveedores por PH.\n- Relaciona proyectos, tareas, documentos y formularios.\n- Muestra trabajo abierto, actividad y estado de sincronización.\n- No incorpora pagos ni gestión financiera."
+    },
+    {
+      "key": "E6-I4",
+      "epic": "E6",
+      "title": "Crear centro de notificaciones y actividad de proyecto",
+      "labels": ["ui", "domain", "priority:medium", "size:M"],
+      "body": "Completar las superficies de actividad y notificaciones simuladas.\n\nCriterios de aceptación:\n- Eventos se derivan del historial real.\n- Notificaciones pueden marcarse como leídas.\n- Los enlaces abren el recurso correcto dentro de su PH."
+    },
+    {
+      "key": "E6-I5",
+      "epic": "E6",
+      "title": "Definir contratos HTTP/OpenAPI y adaptador HTTP inicial",
+      "labels": ["integration", "data", "domain", "priority:high", "size:L"],
+      "body": "Formalizar endpoints, consultas, errores, paginación, concurrencia e idempotencia.\n\nCriterios de aceptación:\n- Contratos usan Zod y coinciden con las interfaces del repositorio.\n- Incluyen `phId`, fechas ISO, cursor, version/ETag y errores uniformes.\n- Sustituir el adaptador local no cambia las vistas."
+    },
+    {
+      "key": "E7-I1",
+      "epic": "E7",
+      "title": "Implementar métricas y selectores de informes",
+      "labels": ["reports", "domain", "testing", "priority:critical", "size:L"],
+      "body": "Calcular todos los indicadores del PRD desde tareas y actividad.\n\nCriterios de aceptación:\n- Incluye pendientes, terminadas, próximas, atrasadas, estancadas, resolución y cumplimiento.\n- Respeta filtros, permisos, categorías semánticas y zona horaria.\n- No existen cifras simuladas independientes.\n- Casos límite están probados."
+    },
+    {
+      "key": "E7-I2",
+      "epic": "E7",
+      "title": "Construir informes de proyecto y generales del PH",
+      "labels": ["reports", "ui", "responsive", "priority:high", "size:L"],
+      "body": "Crear MetricCards, ChartCards y filtros de informes con Recharts.\n\nCriterios de aceptación:\n- Incluye todas las gráficas y filtros definidos.\n- Gráficas tienen tabla o resumen accesible equivalente.\n- Los informes generales no cruzan PH y respetan el rol."
+    },
+    {
+      "key": "E7-I3",
+      "epic": "E7",
+      "title": "Auditar estados obligatorios, permisos y conflictos",
+      "labels": ["testing", "security", "ui", "priority:critical", "size:M"],
+      "body": "Revisar todas las superficies contra los estados obligatorios del PRD.\n\nCriterios de aceptación:\n- Cada superficie cubre carga, vacío, sin resultados, error y acceso denegado.\n- Acciones destructivas confirman y los éxitos son no intrusivos.\n- Conflictos de versión tienen recuperación."
+    },
+    {
+      "key": "E7-I4",
+      "epic": "E7",
+      "title": "Completar auditoría responsive y experiencia móvil",
+      "labels": ["responsive", "ui", "testing", "priority:critical", "size:L"],
+      "body": "Validar escritorio, tableta y móvil con énfasis en el trabajador operativo.\n\nCriterios de aceptación:\n- Navegación, tableros, tablas, calendario y detalle son utilizables en los tres tamaños.\n- Desde móvil se puede cambiar estado y adjuntar evidencia.\n- No hay controles inaccesibles por desbordamiento."
+    },
+    {
+      "key": "E7-I5",
+      "epic": "E7",
+      "title": "Completar auditoría WCAG 2.2 AA",
+      "labels": ["accessibility", "testing", "priority:critical", "size:L"],
+      "body": "Auditar teclado, foco, nombres accesibles, contraste, anuncios y movimiento reducido.\n\nCriterios de aceptación:\n- Todos los recorridos críticos funcionan sin ratón.\n- No se comunica información solo con color.\n- Arrastres tienen alternativa equivalente.\n- Se corrigen hallazgos AA y se documentan excepciones."
+    },
+    {
+      "key": "E7-I6",
+      "epic": "E7",
+      "title": "Ejecutar pruebas integrales y recorrido de aceptación",
+      "labels": ["testing", "priority:critical", "size:L"],
+      "body": "Proteger los recorridos críticos y ejecutar la aceptación final del PRD.\n\nCriterios de aceptación:\n- Pruebas cubren aislamiento, columnas, tareas, sincronización, permisos, persistencia, formularios e indicadores.\n- Los 15 criterios generales tienen evidencia.\n- Build de producción termina sin errores ni controles principales decorativos."
+    },
+    {
+      "key": "E7-I7",
+      "epic": "E7",
+      "title": "Documentar arquitectura, demo y preparación del backend",
+      "labels": ["foundation", "integration", "priority:high", "size:M"],
+      "body": "Crear documentación de desarrollo, decisiones, datos demo, repositorios y sustitución por HTTP.\n\nCriterios de aceptación:\n- Un desarrollador nuevo puede instalar, ejecutar, probar y restablecer la demo.\n- Se documentan contratos y pendientes antes del backend.\n- El recorrido de demostración cubre todas las fases."
+    }
+  ]
+}
