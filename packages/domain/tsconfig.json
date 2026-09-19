@@ -1,1 +1,1 @@
-{ "extends": "../config/tsconfig.json", "compilerOptions": { "module": "NodeNext", "moduleResolution": "NodeNext" }, "include": ["src/**/*.ts", "test/**/*.ts"] }
+{ "extends": "../config/tsconfig.json", "compilerOptions": { "module": "NodeNext", "moduleResolution": "NodeNext", "allowImportingTsExtensions": true }, "include": ["src/**/*.ts", "test/**/*.ts"] }

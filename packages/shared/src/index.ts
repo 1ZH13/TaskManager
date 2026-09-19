@@ -27,7 +27,7 @@ export const boardSchema = entity.extend({ projectId: z.uuid(), name: z.string()
 export const boardColumnSchema = z.object({ id: z.uuid(), phId: z.uuid(), boardId: z.uuid(), name: z.string().min(1), category: statusCategorySchema, color: z.string().regex(/^#[0-9A-Fa-f]{6}$/), position: z.int().nonnegative() });
 export const workItemSchema = entity.extend({
   projectId: z.uuid(), boardId: z.uuid(), columnId: z.uuid(), key: z.string().regex(/^[A-Z]{2,10}-\d+$/), type: workItemTypeSchema,
-  title: z.string().min(1), description: z.string().optional(), priority: prioritySchema, reporterId: z.uuid(), assigneeId: z.uuid().optional(), teamId: z.uuid().optional(), providerId: z.uuid().optional(), parentId: z.uuid().optional(), startsOn: z.iso.date().optional(), dueOn: z.iso.date().optional(), blockedReason: z.string().min(1).optional(), requiresEvidence: z.boolean(), requiresValidation: z.boolean(), position: z.int().nonnegative(), labels: z.array(z.string().min(1)),
+  title: z.string().min(1), description: z.string().optional(), priority: prioritySchema, reporterId: z.uuid(), assigneeId: z.uuid().optional(), teamId: z.uuid().optional(), providerId: z.uuid().optional(), parentId: z.uuid().optional(), startsOn: z.iso.date().optional(), dueOn: z.iso.date().optional(), blockedReason: z.string().min(1).optional(), requiresEvidence: z.boolean(), requiresValidation: z.boolean(), evidenceUrl: z.url().optional(), evidenceSubmittedAt: isoDateTime.optional(), validationStatus: z.enum(['NOT_REQUIRED', 'PENDING', 'APPROVED', 'REJECTED']), validationComment: z.string().min(1).optional(), position: z.int().nonnegative(), labels: z.array(z.string().min(1)),
 }).refine((item) => !item.startsOn || !item.dueOn || item.startsOn <= item.dueOn, { message: 'La fecha inicial debe preceder al vencimiento', path: ['dueOn'] });
 export const personSchema = entity.extend({ nationalId: z.string().min(3), firstName: z.string().min(1), lastName: z.string().min(1), displayName: z.string().min(1), avatarUrl: z.url().optional(), jobTitle: z.string().optional(), role: roleSchema, status: z.enum(['ACTIVE', 'INACTIVE']) });
 export const teamSchema = entity.extend({ name: z.string().min(1), type: z.enum(['ADMINISTRATION', 'OPERATIONS', 'CLEANING', 'MAINTENANCE', 'SECURITY', 'ACCOUNTING', 'OTHER']), description: z.string().optional(), leadId: z.uuid().optional(), memberIds: z.array(z.uuid()), status: z.enum(['ACTIVE', 'ARCHIVED']) });
@@ -47,3 +47,7 @@ export type WorkItem = z.infer<typeof workItemSchema>;
 export type Person = z.infer<typeof personSchema>;
 export type Team = z.infer<typeof teamSchema>;
 export type ProviderReference = z.infer<typeof providerReferenceSchema>;
+export type ProjectTeam = z.infer<typeof projectTeamSchema>;
+export type ProjectMember = z.infer<typeof projectMemberSchema>;
+export type BoardTeam = z.infer<typeof boardTeamSchema>;
+export type TeamMembership = z.infer<typeof teamMembershipSchema>;

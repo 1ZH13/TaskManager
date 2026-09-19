@@ -41,6 +41,12 @@ importers:
       '@tanstack/react-table':
         specifier: ^9.2.4
         version: 9.2.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@task-manager/data':
+        specifier: workspace:*
+        version: link:../../packages/data
+      '@task-manager/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@task-manager/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -126,6 +132,9 @@ importers:
 
   packages/data:
     dependencies:
+      '@task-manager/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@task-manager/shared':
         specifier: workspace:*
         version: link:../shared
