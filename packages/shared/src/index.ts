@@ -13,7 +13,7 @@ export const managementModuleSchema = z.enum(['ADMINISTRATIVE', 'OPERATIONS', 'A
 export const statusCategorySchema = z.enum(['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE']);
 export const workItemTypeSchema = z.enum(['TASK', 'RECURRING_TASK', 'INCIDENT', 'SUBTASK', 'MILESTONE']);
 export const prioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
-export const roleSchema = z.enum(['ADMIN', 'SUPERVISOR', 'COLLABORATOR']);
+export const roleSchema = z.enum(['ADMIN', 'COLLABORATOR']);
 
 export const propertyContextSchema = entity.extend({
   name: z.string().min(1), code: z.string().min(2), status: z.enum(['ACTIVE', 'INACTIVE']),
@@ -23,14 +23,14 @@ export const projectSchema = entity.extend({
   description: z.string().optional(), icon: z.string().optional(), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   startsOn: z.iso.date().optional(), endsOn: z.iso.date().optional(), status: z.enum(['ACTIVE', 'ARCHIVED']),
 }).refine((project) => !project.startsOn || !project.endsOn || project.startsOn <= project.endsOn, { message: 'La fecha de inicio debe preceder a la fecha final', path: ['endsOn'] });
-export const boardSchema = entity.extend({ projectId: z.uuid(), name: z.string().min(1) });
+export const boardSchema = entity.extend({ projectId: z.uuid(), name: z.string().min(1), teamIds: z.array(z.uuid()) });
 export const boardColumnSchema = z.object({ id: z.uuid(), phId: z.uuid(), boardId: z.uuid(), name: z.string().min(1), category: statusCategorySchema, color: z.string().regex(/^#[0-9A-Fa-f]{6}$/), position: z.int().nonnegative() });
 export const workItemSchema = entity.extend({
   projectId: z.uuid(), boardId: z.uuid(), columnId: z.uuid(), key: z.string().regex(/^[A-Z]{2,10}-\d+$/), type: workItemTypeSchema,
-  title: z.string().min(1), description: z.string().optional(), priority: prioritySchema, reporterId: z.uuid(), assigneeId: z.uuid().optional(), teamId: z.uuid().optional(), validatorId: z.uuid().optional(), providerId: z.uuid().optional(), parentId: z.uuid().optional(), startsOn: z.iso.date().optional(), dueOn: z.iso.date().optional(), blockedReason: z.string().min(1).optional(), requiresEvidence: z.boolean(), requiresValidation: z.boolean(), position: z.int().nonnegative(), labels: z.array(z.string().min(1)),
+  title: z.string().min(1), description: z.string().optional(), priority: prioritySchema, reporterId: z.uuid(), assigneeId: z.uuid().optional(), teamId: z.uuid().optional(), providerId: z.uuid().optional(), parentId: z.uuid().optional(), startsOn: z.iso.date().optional(), dueOn: z.iso.date().optional(), blockedReason: z.string().min(1).optional(), requiresEvidence: z.boolean(), requiresValidation: z.boolean(), position: z.int().nonnegative(), labels: z.array(z.string().min(1)),
 }).refine((item) => !item.startsOn || !item.dueOn || item.startsOn <= item.dueOn, { message: 'La fecha inicial debe preceder al vencimiento', path: ['dueOn'] });
 export const personSchema = entity.extend({ nationalId: z.string().min(3), firstName: z.string().min(1), lastName: z.string().min(1), displayName: z.string().min(1), avatarUrl: z.url().optional(), jobTitle: z.string().optional(), role: roleSchema, status: z.enum(['ACTIVE', 'INACTIVE']) });
-export const teamSchema = entity.extend({ name: z.string().min(1), type: z.enum(['ADMINISTRATION', 'OPERATIONS', 'CLEANING', 'MAINTENANCE', 'SECURITY', 'ACCOUNTING', 'OTHER']), description: z.string().optional(), leadId: z.uuid().optional(), status: z.enum(['ACTIVE', 'ARCHIVED']) });
+export const teamSchema = entity.extend({ name: z.string().min(1), type: z.enum(['ADMINISTRATION', 'OPERATIONS', 'CLEANING', 'MAINTENANCE', 'SECURITY', 'ACCOUNTING', 'OTHER']), description: z.string().optional(), leadId: z.uuid().optional(), memberIds: z.array(z.uuid()), status: z.enum(['ACTIVE', 'ARCHIVED']) });
 export const providerReferenceSchema = entity.extend({ externalId: z.string().min(1), source: z.literal('PH_PLATFORM'), name: z.string().min(1), legalName: z.string().optional(), taxId: z.string().optional(), status: z.enum(['ACTIVE', 'INACTIVE']), syncedAt: isoDateTime.optional() });
 
 const association = entity.extend({});
