@@ -10,7 +10,7 @@ class MemoryStore implements KeyValueStore {
   removeItem(key: string) { this.data.delete(key); }
 }
 const admin: Actor = { id: demoIds.admin, phId: demoIds.vista, role: 'ADMIN', status: 'ACTIVE', projectIds: [], teamIds: [] };
-const taskInput: CreateWorkItemInput = { phId: demoIds.vista, projectId: demoIds.opsProject, boardId: demoIds.opsBoard, columnId: '70000000-0000-4000-8000-000000000001', key: 'OPS-1', type: 'TASK', title: 'Revisar bomba', priority: 'HIGH', reporterId: demoIds.admin, assigneeId: demoIds.collab, requiresEvidence: false, requiresValidation: false, validationStatus: 'NOT_REQUIRED', position: 0, labels: [] };
+const taskInput: CreateWorkItemInput = { phId: demoIds.vista, projectId: demoIds.opsProject, boardId: demoIds.opsBoard, columnId: 'b0000000-0000-4000-8000-000000000001', key: 'OPS-4', type: 'TASK', title: 'Revisar bomba', priority: 'HIGH', reporterId: demoIds.admin, assigneeId: demoIds.collab, dependencyIds: [], requiresEvidence: false, requiresValidation: false, validationStatus: 'NOT_REQUIRED', position: 0, labels: [] };
 
 describe('LocalWorkManagementRepository', () => {
   it('siembra datos deterministas de dos PH y recupera persistencia corrupta', async () => {
@@ -28,7 +28,7 @@ describe('LocalWorkManagementRepository', () => {
     store.setItem('task-manager.demo.v1', JSON.stringify(v1));
     const contexts = await new LocalWorkManagementRepository(store, () => admin).listPropertyContexts();
     expect(contexts.map((context) => context.id)).toEqual([demoIds.vista, demoIds.bahia]);
-    expect(store.getItem('task-manager.demo.v2')).toContain('"schemaVersion":2');
+    expect(store.getItem('task-manager.demo.v2')).toContain('"schemaVersion":4');
   });
 
   it('no permite consultar ni mutar recursos de otra PH', async () => {
@@ -54,7 +54,7 @@ describe('LocalWorkManagementRepository', () => {
     const store = new MemoryStore(); const repository = new LocalWorkManagementRepository(store, () => admin);
     const created = await repository.createWorkItem(taskInput);
     const initialVersion = created.version;
-    expect((await new LocalWorkManagementRepository(store, () => admin).listWorkItems({ phId: demoIds.vista })).items).toHaveLength(2);
+    expect((await new LocalWorkManagementRepository(store, () => admin).listWorkItems({ phId: demoIds.vista })).items).toHaveLength(4);
     await repository.updateWorkItem(created.id, { version: initialVersion, title: 'Revisar bomba principal' });
     await expect(repository.updateWorkItem(created.id, { version: initialVersion, title: 'Cambio obsoleto' })).rejects.toMatchObject({ code: 'CONFLICT' });
   });
@@ -67,5 +67,51 @@ describe('LocalWorkManagementRepository', () => {
     const reviewed = await new LocalWorkManagementRepository(store, () => admin).reviewWorkItem({ id: submitted.id, phId: demoIds.vista, decision: 'APPROVED', version: submitted.version });
     expect(reviewed.validationStatus).toBe('APPROVED');
     await expect(new LocalWorkManagementRepository(store, () => collaborator).reviewWorkItem({ id: reviewed.id, phId: demoIds.vista, decision: 'REJECTED', comment: 'No', version: reviewed.version })).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
+  });
+
+  it('protege las invariantes de columnas y exige migrar las tareas al borrar', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    const columns = await repository.listBoardColumns({ phId: demoIds.vista, boardId: demoIds.opsBoard });
+    expect(columns).toHaveLength(4);
+    await expect(repository.deleteBoardColumn({ phId: demoIds.vista, id: columns[0]!.id })).rejects.toMatchObject({ code: 'VALIDATION' });
+    const reordered = await repository.reorderBoardColumns(demoIds.vista, demoIds.opsBoard, columns.map((column) => column.id).reverse());
+    expect(reordered.map((column) => column.id)).toEqual(columns.map((column) => column.id).reverse());
+    await repository.deleteBoardColumn({ phId: demoIds.vista, id: columns[0]!.id, destinationColumnId: columns[1]!.id, replacements: { rejectedColumnId: columns[1]!.id } });
+    expect(await repository.listBoardColumns({ phId: demoIds.vista, boardId: demoIds.opsBoard })).toHaveLength(3);
+  });
+
+  it('inserta columnas en la posición solicitada sin duplicar el orden', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    await repository.createBoardColumn({ phId: demoIds.vista, boardId: demoIds.opsBoard, name: 'Priorizada', category: 'TODO', color: '#4583BD', position: 1 });
+    expect((await repository.listBoardColumns({ phId: demoIds.vista, boardId: demoIds.opsBoard })).map((column) => column.position)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('cubre el ciclo CRUD de tableros y protege los que aún tienen tareas', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    const board = await repository.createBoard({ phId: demoIds.vista, projectId: demoIds.opsProject, name: 'Inspecciones', teamIds: [demoIds.teamB] });
+    expect(await repository.listBoardColumns({ phId: demoIds.vista, boardId: board.id })).toHaveLength(4);
+    const renamed = await repository.updateBoard(board.id, { version: board.version, name: 'Inspecciones mensuales' });
+    expect(renamed.name).toBe('Inspecciones mensuales');
+    await repository.deleteBoard(demoIds.vista, board.id, renamed.version);
+    const workBoard = (await repository.listBoards({ phId: demoIds.vista, projectId: demoIds.opsProject }))[0]!;
+    await expect(repository.deleteBoard(demoIds.vista, workBoard.id, workBoard.version)).rejects.toMatchObject({ code: 'VALIDATION' });
+  });
+
+  it('expone la regla de transición del dominio desde el adaptador local', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    const item = (await repository.listWorkItems({ phId: demoIds.vista, projectId: demoIds.opsProject })).items[0]!;
+    const done = (await repository.listBoardColumns({ phId: demoIds.vista, boardId: demoIds.opsBoard })).find((column) => column.category === 'DONE')!;
+    expect(() => repository.checkTransition({ ...item, evidenceSubmittedAt: undefined }, done.id)).toThrow('evidencia');
+  });
+
+  it('aplica la política y el orden dentro del repositorio, incluso sin UI', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    const [item] = (await repository.listWorkItems({ phId: demoIds.vista, projectId: demoIds.opsProject })).items;
+    const columns = await repository.listBoardColumns({ phId: demoIds.vista, boardId: demoIds.opsBoard });
+    const done = columns.find((column) => column.category === 'DONE')!;
+    await expect(repository.moveWorkItem({ id: item!.id, phId: demoIds.vista, columnId: done.id, position: 0, version: item!.version })).rejects.toMatchObject({ code: 'VALIDATION' });
+    const created = await repository.createWorkItem(taskInput);
+    expect(created.key).toBe('OPS-4');
+    expect((await repository.listActivity(demoIds.vista, created.id))[0]?.type).toBe('CREATED');
   });
 });
