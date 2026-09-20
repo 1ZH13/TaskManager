@@ -44,6 +44,82 @@ describe('LocalWorkManagementRepository', () => {
     await expect(createHttpRepository().listProjects({ phId: demoIds.vista })).rejects.toMatchObject({ code: 'NOT_CONFIGURED' });
   });
 
+  it('expone por HTTP las consultas base que necesitan las vistas existentes', async () => {
+    const urls: string[] = [];
+    const fetchFn = async (input: string | URL | Request) => {
+      const url = String(input); urls.push(url);
+      return new Response(JSON.stringify(url.includes('/work-items?') ? { items: [] } : []), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const repository = createHttpRepository({ baseUrl: 'https://api.demo.local', fetchFn: fetchFn as typeof fetch });
+    await Promise.all([
+      repository.listPropertyContexts(),
+      repository.listProjects({ phId: demoIds.vista, includeArchived: true }),
+      repository.listBoards({ phId: demoIds.vista, projectId: demoIds.opsProject }),
+      repository.listBoardColumns({ phId: demoIds.vista, boardId: demoIds.opsBoard }),
+      repository.listWorkItems({ phId: demoIds.vista, boardId: demoIds.opsBoard }),
+      repository.listPeople({ phId: demoIds.vista }),
+      repository.listTeams({ phId: demoIds.vista }),
+      repository.listComments(demoIds.vista, 'a0000000-0000-4000-8000-000000000001'),
+      repository.listAttachments(demoIds.vista, 'a0000000-0000-4000-8000-000000000001'),
+      repository.listProjectTeams(demoIds.vista),
+      repository.listProjectMembers(demoIds.vista),
+      repository.listBoardTeams(demoIds.vista),
+      repository.listTeamMemberships(demoIds.vista),
+    ]);
+    expect(urls).toContain('https://api.demo.local/api/v1/property-contexts');
+    expect(urls).toContain(`https://api.demo.local/api/v1/property-contexts/${demoIds.vista}/boards?phId=${demoIds.vista}&projectId=${demoIds.opsProject}`);
+    expect(urls).toContain(`https://api.demo.local/api/v1/property-contexts/${demoIds.vista}/work-items?phId=${demoIds.vista}&boardId=${demoIds.opsBoard}`);
+    expect(urls).toContain(`https://api.demo.local/api/v1/property-contexts/${demoIds.vista}/work-items/a0000000-0000-4000-8000-000000000001/comments`);
+    expect(urls).toContain(`https://api.demo.local/api/v1/property-contexts/${demoIds.vista}/project-teams`);
+  });
+
+  it('envía recursos E6 por HTTP con idempotencia y versiones', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchFn = async (input: string | URL | Request, init?: RequestInit) => { calls.push({ url: String(input), init }); const entity = { id: calls.length === 1 ? 'd0000000-0000-4000-8000-000000000099' : 'e0000000-0000-4000-8000-000000000099', phId: demoIds.vista, createdAt: '2026-09-18T12:00:00.000Z', updatedAt: '2026-09-18T12:00:00.000Z', version: 1 }; const payload = calls.length === 1 ? { ...entity, name: 'acta.pdf', mimeType: 'application/pdf', sizeBytes: 10, url: 'https://demo.local/acta.pdf', uploadedById: demoIds.admin } : { ...entity, recipientId: demoIds.admin, title: 'Actualizada', body: 'Leída', resourceType: 'WORK_ITEM', resourceId: 'a0000000-0000-4000-8000-000000000001', readAt: '2026-09-18T12:00:00.000Z' }; return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } }); };
+    const repository = createHttpRepository({ baseUrl: 'https://api.demo.local/', fetchFn: fetchFn as typeof fetch });
+    await repository.createDocument({ phId: demoIds.vista, name: 'acta.pdf', mimeType: 'application/pdf', sizeBytes: 10, url: 'https://demo.local/acta.pdf' });
+    await repository.markNotificationRead(demoIds.vista, 'e0000000-0000-4000-8000-000000000001', 2);
+    expect(calls[0]?.url).toBe(`https://api.demo.local/api/v1/property-contexts/${demoIds.vista}/documents`);
+    expect(new Headers(calls[0]?.init?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect(new Headers(calls[1]?.init?.headers).get('If-Match')).toBe('2');
+  });
+
+  it('preserva idempotencia y concurrencia en mutaciones HTTP base', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchFn = async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return new Response(JSON.stringify({ id: demoIds.opsProject, phId: demoIds.vista, createdAt: '2026-09-18T12:00:00.000Z', updatedAt: '2026-09-18T12:00:00.000Z', version: 2, module: 'OPERATIONS', key: 'OPS', name: 'Operaciones', color: '#245E40', status: 'ACTIVE' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const repository = createHttpRepository({ baseUrl: 'https://api.demo.local', fetchFn: fetchFn as typeof fetch });
+    await repository.createProject({ phId: demoIds.vista, module: 'OPERATIONS', key: 'OPS', name: 'Operaciones', color: '#245E40' });
+    await repository.updateProject(demoIds.opsProject, { version: 1, name: 'Operaciones actualizadas' });
+    expect(calls[0]?.url).toBe(`https://api.demo.local/api/v1/property-contexts/${demoIds.vista}/projects`);
+    expect(new Headers(calls[0]?.init?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect(calls[1]?.url).toBe(`https://api.demo.local/api/v1/projects/${demoIds.opsProject}`);
+    expect(new Headers(calls[1]?.init?.headers).get('If-Match')).toBe('1');
+  });
+
+  it('envía las solicitudes especiales E6 por la frontera HTTP', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchFn = async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      const entity = { id: 'd0000000-0000-4000-8000-000000000099', phId: demoIds.vista, createdAt: '2026-09-18T12:00:00.000Z', updatedAt: '2026-09-18T12:00:00.000Z', version: 1 };
+      const payload = calls.length === 1
+        ? { ...entity, formId: 'f0000000-0000-4000-8000-000000000002', submittedById: demoIds.admin, values: {} }
+        : { ...entity, name: 'factura.pdf', mimeType: 'application/pdf', sizeBytes: 0, url: 'https://demo.local/factura.pdf', uploadedById: demoIds.admin };
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const repository = createHttpRepository({ baseUrl: 'https://api.demo.local', fetchFn: fetchFn as typeof fetch });
+    await repository.submitAppointment(demoIds.vista, { ruc: '123', dv: '1', attendeeName: 'Ana Pérez', date: '2026-10-01', time: '10:30' });
+    await repository.submitInvoice({ phId: demoIds.vista, invoiceName: 'factura.pdf', documentUrl: 'https://demo.local/factura.pdf', subtotal: 100, itbmsRate: 0.07 });
+    expect(calls.map((call) => call.url)).toEqual([
+      `https://api.demo.local/api/v1/property-contexts/${demoIds.vista}/appointments`,
+      `https://api.demo.local/api/v1/property-contexts/${demoIds.vista}/invoices`,
+    ]);
+    expect(new Headers(calls[0]?.init?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect(new Headers(calls[1]?.init?.headers).get('Idempotency-Key')).toBeTruthy();
+  });
+
   it('limita al colaborador a sus proyectos asignados', async () => {
     const collaborator: Actor = { id: demoIds.collab, phId: demoIds.vista, role: 'COLLABORATOR', status: 'ACTIVE', projectIds: [demoIds.opsProject], teamIds: [demoIds.teamB] };
     const projects = await new LocalWorkManagementRepository(new MemoryStore(), () => collaborator).listProjects({ phId: demoIds.vista });
@@ -113,5 +189,39 @@ describe('LocalWorkManagementRepository', () => {
     const created = await repository.createWorkItem(taskInput);
     expect(created.key).toBe('OPS-4');
     expect((await repository.listActivity(demoIds.vista, created.id))[0]?.type).toBe('CREATED');
+  });
+
+  it('valida formularios publicados, crea su tarea configurada y preserva el aislamiento PH', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    const form = await repository.createForm({ phId: demoIds.vista, projectId: demoIds.opsProject, name: 'Incidencia', status: 'PUBLISHED', fields: [{ id: 'title', label: 'Título', type: 'TEXT', required: true }], createTask: true, destinationProjectId: demoIds.opsProject, destinationBoardId: demoIds.opsBoard });
+    await expect(repository.submitForm({ phId: demoIds.vista, formId: form.id, values: {} })).rejects.toMatchObject({ code: 'VALIDATION' });
+    const submission = await repository.submitForm({ phId: demoIds.vista, formId: form.id, values: { title: 'Fuga en lobby' } });
+    expect(submission.createdWorkItemId).toBeDefined();
+    await expect(repository.listForms({ phId: demoIds.bahia })).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
+  });
+
+  it('aplica validadores Zod según el tipo de campo publicado', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    const form = await repository.createForm({ phId: demoIds.vista, name: 'Datos de contacto', status: 'PUBLISHED', fields: [{ id: 'email', label: 'Correo', type: 'EMAIL', required: true }, { id: 'amount', label: 'Monto', type: 'NUMBER', required: true }, { id: 'choice', label: 'Opción', type: 'SELECT', required: true, options: ['A', 'B'] }], createTask: false });
+    await expect(repository.submitForm({ phId: demoIds.vista, formId: form.id, values: { email: 'invalido', amount: 'diez', choice: 'C' } })).rejects.toMatchObject({ code: 'VALIDATION' });
+    await expect(repository.submitForm({ phId: demoIds.vista, formId: form.id, values: { email: 'ana@vista.pa', amount: '10.50', choice: 'A' } })).resolves.toMatchObject({ formId: form.id });
+  });
+
+  it('mantiene documentos y notificaciones dentro de la PH y permite marcar lectura', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    const document = await repository.createDocument({ phId: demoIds.vista, name: 'Acta.pdf', mimeType: 'application/pdf', sizeBytes: 42, url: 'https://demo.local/acta.pdf' });
+    expect((await repository.listDocuments({ phId: demoIds.vista, query: 'acta' })).items).toContainEqual(document);
+    const [notification] = (await repository.listNotifications({ phId: demoIds.vista })).items;
+    expect((await repository.markNotificationRead(demoIds.vista, notification!.id, notification!.version)).readAt).toBeDefined();
+    await expect(repository.listDocuments({ phId: demoIds.bahia })).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
+  });
+
+  it('persiste solicitudes de cita y factura como recursos simulados del PH', async () => {
+    const repository = new LocalWorkManagementRepository(new MemoryStore(), () => admin);
+    const appointment = await repository.submitAppointment(demoIds.vista, { ruc: '155-123-456', dv: '7', attendeeName: 'María Pérez', date: '2026-09-22', time: '09:30' });
+    expect(appointment.formId).toBe('f0000000-0000-4000-8000-000000000002');
+    const invoice = await repository.submitInvoice({ phId: demoIds.vista, invoiceName: 'Factura septiembre.pdf', documentUrl: 'https://demo.local/facturas/septiembre.pdf', subtotal: 100, itbmsRate: 0.07 });
+    expect(invoice.projectId).toBe(demoIds.accountingProject);
+    expect((await repository.listDocuments({ phId: demoIds.vista, projectId: demoIds.accountingProject })).items).toContainEqual(invoice);
   });
 });

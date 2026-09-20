@@ -9,6 +9,10 @@ import { Button, ConflictState, StatusBadge } from '../../../../packages/ui/src/
 import type { BoardColumn, Person, Project, Team, WorkItem } from '@task-manager/shared';
 import { useDemo } from './demo-context';
 import { OperationalBoard } from './operational-board';
+import { SynchronizedViews } from './synchronized-views';
+import { DocumentsPage, ProvidersPage, NotificationsPage } from './resource-pages';
+import { FormsPage } from './forms-page';
+import { ActivityPage } from './activity-page';
 
 const moduleBySegment: Record<string, Project['module']> = {
   administrativa: 'ADMINISTRATIVE',
@@ -73,6 +77,14 @@ export function WorkspaceContent({ segments }: { segments: string[] }) {
       </section>
     );
   if (segments.includes('validaciones')) return <ValidationPanel />;
+  if (segments.includes('documentos')) return <DocumentsPage />;
+  if (segments.includes('formularios')) return <FormsPage />;
+  if (segments.includes('proveedores')) return <ProvidersPage />;
+  if (segments.includes('notificaciones')) return <NotificationsPage />;
+  if (segments.includes('actividad')) return <ActivityPage />;
+  if (segments.includes('lista')) return <SynchronizedViews view="list" />;
+  if (segments.includes('calendario')) return <SynchronizedViews view="calendar" />;
+  if (segments.includes('cronograma')) return <SynchronizedViews view="timeline" />;
   if (segments.includes('tablero')) return <OperationalBoard />;
   if (segments.includes('tareas')) return <TaskPage />;
   const section = segments[0] ?? '';

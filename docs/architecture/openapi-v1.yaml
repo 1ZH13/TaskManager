@@ -1,0 +1,123 @@
+openapi: 3.1.0
+info:
+  title: Task Manager API
+  version: 0.1.0
+  description: Contratos iniciales de recursos e integraciones del épico E6.
+servers:
+  - url: /api/v1
+paths:
+  /property-contexts/{phId}/documents:
+    get:
+      summary: Lista documentos aislados por PH
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/cursor' }]
+      responses: { '200': { description: Página de documentos, content: { application/json: { schema: { $ref: '#/components/schemas/DocumentPage' } } } }, '403': { $ref: '#/components/responses/Error' } }
+    post:
+      summary: Registra metadatos de un archivo ya cargado
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DocumentInput' } } } }
+      responses: { '201': { description: Documento creado, content: { application/json: { schema: { $ref: '#/components/schemas/Document' } } } }, '422': { $ref: '#/components/responses/Error' } }
+  /property-contexts/{phId}/documents/{id}:
+    delete:
+      summary: Elimina un documento con control de versión
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/ifMatch' }]
+      responses: { '204': { description: Eliminado }, '409': { $ref: '#/components/responses/Error' } }
+  /property-contexts/{phId}/forms:
+    get:
+      summary: Lista formularios publicados o borradores autorizados
+      parameters: [{ $ref: '#/components/parameters/phId' }]
+      responses: { '200': { description: Formularios, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Form' } } } } }
+    post:
+      summary: Crea un formulario declarativo
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      responses: { '201': { description: Formulario creado } }
+  /property-contexts/{phId}/forms/{id}/submissions:
+    post:
+      summary: Valida y registra un envío
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      responses: { '201': { description: Envío registrado, content: { application/json: { schema: { $ref: '#/components/schemas/FormSubmission' } } } }, '422': { $ref: '#/components/responses/Error' } }
+  /property-contexts/{phId}/boards/{id}/columns:
+    get:
+      summary: Lista las columnas ordenadas de un tablero
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Columnas, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/BoardColumn' } } } } }
+    post:
+      summary: Crea una columna de tablero
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      responses: { '201': { description: Columna creada, content: { application/json: { schema: { $ref: '#/components/schemas/BoardColumn' } } } }
+  /property-contexts/{phId}/boards/{id}/columns/reorder:
+    post:
+      summary: Reordena las columnas de un tablero
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [columnIds], properties: { columnIds: { type: array, items: { type: string, format: uuid } } } } } } }
+      responses: { '200': { description: Columnas reordenadas, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/BoardColumn' } } } } }
+  /property-contexts/{phId}/teams/{id}/members:
+    put:
+      summary: Reemplaza miembros de un equipo
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [personIds], properties: { personIds: { type: array, items: { type: string, format: uuid } } } } } } }
+      responses: { '204': { description: Membresía actualizada } }
+  /property-contexts/{phId}/projects/{id}/validation-policy:
+    get:
+      summary: Obtiene la política de validación de un proyecto
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Política, content: { application/json: { schema: { $ref: '#/components/schemas/ValidationPolicy' } } } }, '404': { $ref: '#/components/responses/Error' } }
+    put:
+      summary: Crea o actualiza la política de validación
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      responses: { '200': { description: Política guardada, content: { application/json: { schema: { $ref: '#/components/schemas/ValidationPolicy' } } } }, '409': { $ref: '#/components/responses/Error' } }
+  /property-contexts/{phId}/appointments:
+    post:
+      summary: Registra una solicitud de cita mediante el formulario especial
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AppointmentRequest' } } } }
+      responses: { '201': { description: Envío de cita registrado, content: { application/json: { schema: { $ref: '#/components/schemas/FormSubmission' } } } }, '422': { $ref: '#/components/responses/Error' } }
+  /property-contexts/{phId}/invoices:
+    post:
+      summary: Registra una factura y su documento asociado
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/InvoiceSubmission' } } } }
+      responses: { '201': { description: Documento de factura creado, content: { application/json: { schema: { $ref: '#/components/schemas/Document' } } } }, '422': { $ref: '#/components/responses/Error' } }
+  /property-contexts/{phId}/providers:
+    get:
+      summary: Consulta el catálogo PH Platform
+      parameters: [{ $ref: '#/components/parameters/phId' }]
+      responses: { '200': { description: Proveedores, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Provider' } } } } }
+  /property-contexts/{phId}/activity:
+    get:
+      summary: Actividad derivada del historial de recursos
+      parameters: [{ $ref: '#/components/parameters/phId' }, { name: workItemId, in: query, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Actividad, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Activity' } } } } }
+  /property-contexts/{phId}/notifications:
+    get:
+      summary: Lista notificaciones paginadas
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/cursor' }]
+      responses: { '200': { description: Página de notificaciones, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationPage' } } } }
+  /property-contexts/{phId}/notifications/{id}:
+    patch:
+      summary: Marca una notificación como leída o no leída
+      parameters: [{ $ref: '#/components/parameters/phId' }, { $ref: '#/components/parameters/id' }, { $ref: '#/components/parameters/ifMatch' }]
+      responses: { '200': { description: Notificación actualizada }, '409': { $ref: '#/components/responses/Error' } }
+components:
+  parameters:
+    phId: { name: phId, in: path, required: true, schema: { type: string, format: uuid } }
+    id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    cursor: { name: cursor, in: query, schema: { type: string } }
+    ifMatch: { name: If-Match, in: header, required: true, schema: { type: integer, minimum: 0 } }
+    idempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Error: { description: Error uniforme, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Entity: { type: object, required: [id, phId, createdAt, updatedAt, version], properties: { id: { type: string, format: uuid }, phId: { type: string, format: uuid }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time }, version: { type: integer, minimum: 0 } } }
+    DocumentInput: { type: object, required: [name, mimeType, sizeBytes, url], properties: { name: { type: string }, mimeType: { type: string }, sizeBytes: { type: integer, minimum: 0 }, url: { type: string, format: uri }, projectId: { type: string, format: uuid }, workItemId: { type: string, format: uuid }, providerId: { type: string, format: uuid }, teamId: { type: string, format: uuid } } }
+    Document: { allOf: [{ $ref: '#/components/schemas/Entity' }, { $ref: '#/components/schemas/DocumentInput' }] }
+    DocumentPage: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Document' } }, nextCursor: { type: string } } }
+    Form: { allOf: [{ $ref: '#/components/schemas/Entity' }, { type: object, required: [name, status, fields, createTask], properties: { name: { type: string }, status: { enum: [DRAFT, PUBLISHED] }, fields: { type: array, items: { type: object } }, createTask: { type: boolean } } }] }
+    BoardColumn: { type: object, required: [id, phId, boardId, name, category, color, position], properties: { id: { type: string, format: uuid }, phId: { type: string, format: uuid }, boardId: { type: string, format: uuid }, name: { type: string }, category: { enum: [TODO, IN_PROGRESS, BLOCKED, DONE] }, color: { type: string }, position: { type: integer, minimum: 0 } } }
+    ValidationPolicy: { allOf: [{ $ref: '#/components/schemas/Entity' }, { type: object, required: [projectId, requiresValidation], properties: { projectId: { type: string, format: uuid }, requiresValidation: { type: boolean }, waitingColumnId: { type: string, format: uuid }, approvedColumnId: { type: string, format: uuid }, rejectedColumnId: { type: string, format: uuid } } }] }
+    FormSubmission: { allOf: [{ $ref: '#/components/schemas/Entity' }, { type: object, required: [formId, submittedById, values], properties: { formId: { type: string, format: uuid }, submittedById: { type: string, format: uuid }, values: { type: object } } }] }
+    AppointmentRequest: { type: object, required: [ruc, dv, attendeeName, date, time], properties: { ruc: { type: string, minLength: 3 }, dv: { type: string, minLength: 1 }, attendeeName: { type: string, minLength: 3 }, date: { type: string, format: date }, time: { type: string, pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' } } }
+    InvoiceSubmission: { type: object, required: [invoiceName, documentUrl, subtotal, itbmsRate], properties: { invoiceName: { type: string, minLength: 3 }, documentUrl: { type: string, format: uri }, subtotal: { type: number, minimum: 0 }, itbmsRate: { type: number, minimum: 0, maximum: 1 }, notes: { type: string, maxLength: 1000 } } }
+    Provider: { allOf: [{ $ref: '#/components/schemas/Entity' }, { type: object, required: [externalId, source, name, status], properties: { externalId: { type: string }, source: { const: PH_PLATFORM }, name: { type: string }, status: { enum: [ACTIVE, INACTIVE] } } }] }
+    Activity: { allOf: [{ $ref: '#/components/schemas/Entity' }, { type: object, required: [workItemId, actorId, type, message], properties: { workItemId: { type: string, format: uuid }, actorId: { type: string, format: uuid }, type: { type: string }, message: { type: string } } }] }
+    NotificationPage: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Entity' } }, nextCursor: { type: string } } }
+    Error: { type: object, required: [error], properties: { error: { type: object, required: [code, message, requestId], properties: { code: { enum: [ACCESS_DENIED, CONFLICT, NOT_FOUND, VALIDATION, NOT_CONFIGURED] }, message: { type: string }, requestId: { type: string, format: uuid }, details: {} } } } }
