@@ -987,7 +987,8 @@ function TaskEditor({
       })
       .catch((failure: RepositoryError) => onError(failure.message));
   };
-  const remove = () =>
+  const remove = () => {
+    if (!window.confirm(`¿Eliminar la tarea ${item.key}? También se eliminarán sus subtareas y actividad.`)) return;
     void repository
       .deleteWorkItem(phId, item.id, item.version)
       .then(() => {
@@ -995,6 +996,7 @@ function TaskEditor({
         onChanged();
       })
       .catch((failure: RepositoryError) => onError(failure.message));
+  };
   return (
     <section className="task-detail" aria-label={`Detalle de ${item.title}`}>
       <div className="toolbar">

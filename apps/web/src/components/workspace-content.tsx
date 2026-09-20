@@ -13,6 +13,7 @@ import { SynchronizedViews } from './synchronized-views';
 import { DocumentsPage, ProvidersPage, NotificationsPage } from './resource-pages';
 import { FormsPage } from './forms-page';
 import { ActivityPage } from './activity-page';
+import { ReportsPage } from './reports-page';
 
 const moduleBySegment: Record<string, Project['module']> = {
   administrativa: 'ADMINISTRATIVE',
@@ -82,6 +83,7 @@ export function WorkspaceContent({ segments }: { segments: string[] }) {
   if (segments.includes('proveedores')) return <ProvidersPage />;
   if (segments.includes('notificaciones')) return <NotificationsPage />;
   if (segments.includes('actividad')) return <ActivityPage />;
+  if (segments.includes('informes')) return <ReportsPage projectId={segments.includes('operaciones') ? demoIds.opsProject : undefined} />;
   if (segments.includes('lista')) return <SynchronizedViews view="list" />;
   if (segments.includes('calendario')) return <SynchronizedViews view="calendar" />;
   if (segments.includes('cronograma')) return <SynchronizedViews view="timeline" />;
