@@ -779,7 +779,10 @@ a {
   font: inherit;
 }
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }
@@ -1044,6 +1047,19 @@ h1 {
   header span {
     display: none;
   }
+  .demo-controls {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    width: 100%;
+    gap: 4px;
+  }
+  .demo-controls label {
+    min-width: 0;
+  }
+  .demo-controls select {
+    width: 100%;
+    max-width: none;
+  }
   .collapse {
     display: none;
   }
@@ -1068,5 +1084,81 @@ h1 {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+.report-filters,
+.report-grid {
+  display: grid;
+  gap: 16px;
+  margin: 24px 0;
+}
+.report-filters {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.report-filters label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+.report-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.report-distribution {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.report-distribution h2,
+.report-chart h2,
+.metric-card h2 {
+  font-size: 0.95rem;
+  margin: 0 0 8px;
+}
+.report-chart {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.report-chart .report-distribution {
+  border: 0;
+  border-radius: 0;
+  padding: 16px 0 0;
+}
+.report-chart__canvas {
+  height: 240px;
+}
+.report-distribution table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.report-distribution th,
+.report-distribution td {
+  border-top: 1px solid var(--color-border);
+  padding: 8px;
+  text-align: left;
+}
+.metric-card p {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .reports-page .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .reports-page .toolbar .tm-button {
+    width: 100%;
+  }
+  .report-chart__canvas {
+    min-width: 320px;
+  }
+  .report-chart {
+    overflow-x: auto;
+  }
+  .report-distribution table {
+    min-width: 240px;
   }
 }

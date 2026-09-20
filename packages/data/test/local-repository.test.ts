@@ -122,8 +122,17 @@ describe('LocalWorkManagementRepository', () => {
 
   it('limita al colaborador a sus proyectos asignados', async () => {
     const collaborator: Actor = { id: demoIds.collab, phId: demoIds.vista, role: 'COLLABORATOR', status: 'ACTIVE', projectIds: [demoIds.opsProject], teamIds: [demoIds.teamB] };
-    const projects = await new LocalWorkManagementRepository(new MemoryStore(), () => collaborator).listProjects({ phId: demoIds.vista });
+    const store = new MemoryStore();
+    const administrator = new LocalWorkManagementRepository(store, () => admin);
+    const adminColumn = await administrator.createBoardColumn({ phId: demoIds.vista, boardId: demoIds.adminBoard, name: 'Privada', category: 'TODO', color: '#4583BD' });
+    await administrator.createWorkItem({ ...taskInput, projectId: demoIds.adminProject, boardId: demoIds.adminBoard, columnId: adminColumn.id, teamId: demoIds.teamA });
+    const repository = new LocalWorkManagementRepository(store, () => collaborator);
+    const projects = await repository.listProjects({ phId: demoIds.vista });
     expect(projects.map((project) => project.id)).toEqual([demoIds.opsProject]);
+    expect((await repository.listBoards({ phId: demoIds.vista })).map((board) => board.projectId)).toEqual([demoIds.opsProject]);
+    expect((await repository.listWorkItems({ phId: demoIds.vista })).items.map((item) => item.projectId)).toEqual([demoIds.opsProject, demoIds.opsProject, demoIds.opsProject]);
+    expect(await repository.listActivity(demoIds.vista)).toEqual([]);
+    await expect(repository.listActivity(demoIds.vista, (await administrator.listWorkItems({ phId: demoIds.vista, projectId: demoIds.adminProject })).items[0]!.id)).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
   });
 
   it('persiste cambios y expone conflictos de versión recuperables', async () => {
