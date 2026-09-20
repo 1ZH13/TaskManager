@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Bookmark, CalendarDays, ChevronDown, UserRound } from 'lucide-react';
 import { demoIds, type RepositoryError } from '@task-manager/data';
 import { checkWorkItemTransition } from '@task-manager/domain';
 import { Button } from '../../../../packages/ui/src/index';
@@ -31,12 +32,12 @@ import { useDemo } from './demo-context';
 
 function Column({
   column,
+  projectId,
   children,
-  hasTasks,
 }: {
   column: BoardColumn;
+  projectId: string;
   children: React.ReactNode;
-  hasTasks: boolean;
 }) {
   const { actor, repository } = useDemo();
   const [editing, setEditing] = useState(false);
@@ -93,7 +94,7 @@ function Column({
     void repository
       .createWorkItem({
         phId: column.phId,
-        projectId: demoIds.opsProject,
+        projectId,
         boardId: column.boardId,
         columnId: column.id,
         key: 'TEMP-0',
@@ -162,21 +163,25 @@ function Column({
           </button>
         </form>
       )}
-      {actor.role === 'ADMIN' && !hasTasks && !creatingTask && (
+      {children}
+      {actor.role === 'ADMIN' && !creatingTask && (
         <button className="column-create-task" onClick={() => setCreatingTask(true)}>
-          ＋ Crear tarea
+          ＋ Crear
         </button>
       )}
       {creatingTask && (
         <form className="column-create-form" onSubmit={createTask}>
-          <input name="title" autoFocus placeholder="Título de la tarea" required />
-          <button>Crear</button>
-          <button type="button" onClick={() => setCreatingTask(false)}>
-            Cancelar
-          </button>
+          <input name="title" autoFocus placeholder="¿Qué hay que hacer?" required />
+          <div className="column-create-actions">
+            <span aria-hidden="true"><Bookmark size={15} /></span>
+            <span aria-hidden="true"><ChevronDown size={15} /></span>
+            <span aria-hidden="true"><CalendarDays size={15} /></span>
+            <span aria-hidden="true"><UserRound size={15} /></span>
+            <button type="submit">Crear</button>
+            <button type="button" aria-label="Cancelar creación" onClick={() => setCreatingTask(false)}>×</button>
+          </div>
         </form>
       )}
-      {children}
     </section>
   );
 }
@@ -193,7 +198,6 @@ function Card({
 }) {
   const { phId, actor, repository } = useDemo();
   const [people, setPeople] = useState<Person[]>([]);
-  const [creatingNext, setCreatingNext] = useState(false);
   useEffect(() => {
     void repository.listPeople({ phId }).then(setPeople);
   }, [phId, repository]);
@@ -206,29 +210,6 @@ function Card({
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
-  const createNext = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const title = String(new FormData(event.currentTarget).get('title'));
-    void repository
-      .createWorkItem({
-        phId,
-        projectId: item.projectId,
-        boardId: item.boardId,
-        columnId: item.columnId,
-        key: 'TEMP-0',
-        type: 'TASK',
-        title,
-        priority: 'MEDIUM',
-        reporterId: actor.id,
-        dependencyIds: [],
-        requiresEvidence: false,
-        requiresValidation: false,
-        validationStatus: 'NOT_REQUIRED',
-        position: 0,
-        labels: [],
-      })
-      .then(() => window.location.reload());
-  };
   return (
     <article ref={ref} style={style} className="task-card" {...attributes}>
       <button className="task-grip" aria-label={`Arrastrar ${item.title}`} {...listeners}>
@@ -263,25 +244,6 @@ function Card({
           ))}
         </select>
       </label>
-      {!creatingNext && (
-        <button
-          type="button"
-          className="task-add-below"
-          aria-label={`Crear tarea debajo de ${item.title}`}
-          onClick={() => setCreatingNext(true)}
-        >
-          ＋
-        </button>
-      )}
-      {creatingNext && (
-        <form className="task-add-form" onSubmit={createNext}>
-          <input name="title" autoFocus placeholder="Nueva tarea" required />
-          <button>Crear</button>
-          <button type="button" onClick={() => setCreatingNext(false)}>
-            Cancelar
-          </button>
-        </form>
-      )}
     </article>
   );
 }
@@ -289,11 +251,13 @@ function Card({
 function BoardControls({
   boards,
   current,
+  projectId,
   onSelect,
   onChanged,
 }: {
   boards: Board[];
   current: Board | null;
+  projectId: string;
   onSelect: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -309,7 +273,7 @@ function BoardControls({
       });
     else
       void repository
-        .createBoard({ phId, projectId: demoIds.opsProject, name, teamIds: [] })
+        .createBoard({ phId, projectId, name, teamIds: [] })
         .then(() => {
           setOpen(false);
           onChanged();
@@ -317,7 +281,7 @@ function BoardControls({
   };
   const create = () =>
     void repository
-      .createBoard({ phId, projectId: demoIds.opsProject, name: 'Nuevo tablero', teamIds: [] })
+      .createBoard({ phId, projectId, name: 'Nuevo tablero', teamIds: [] })
       .then((created) => {
         onSelect(created.id);
         onChanged();
@@ -374,6 +338,7 @@ export function OperationalBoard() {
   const pathname = usePathname();
   const params = useSearchParams();
   const boardId = params.get('board');
+  const projectId = params.get('projectId') ?? demoIds.opsProject;
   const [boards, setBoards] = useState<Board[]>([]);
   const [board, setBoard] = useState<Board | null>(null);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
@@ -389,7 +354,7 @@ export function OperationalBoard() {
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
   const load = useCallback(() => {
     void repository
-      .listBoards({ phId, projectId: demoIds.opsProject })
+      .listBoards({ phId, projectId })
       .then(async (nextBoards) => {
         const nextBoard = nextBoards.find((entry) => entry.id === boardId) ?? nextBoards[0];
         if (!nextBoard) return;
@@ -415,7 +380,7 @@ export function OperationalBoard() {
         );
       })
       .catch((failure: RepositoryError) => setError(failure.message));
-  }, [boardId, phId, repository]);
+  }, [boardId, phId, projectId, repository]);
   useEffect(load, [load]);
   const q = params.get('q')?.toLowerCase() ?? '';
   const priority = params.get('priority') ?? '';
@@ -574,7 +539,7 @@ export function OperationalBoard() {
         {announcement}
       </p>
       {actor.role === 'ADMIN' && (
-        <BoardControls boards={boards} current={board} onSelect={selectBoard} onChanged={load} />
+        <BoardControls boards={boards} current={board} projectId={projectId} onSelect={selectBoard} onChanged={load} />
       )}
       {creating && false && (
         <form className="entity-form" onSubmit={create}>
@@ -847,11 +812,7 @@ export function OperationalBoard() {
       <DndContext sensors={sensors} onDragEnd={dragEnd}>
         <div className="kanban" aria-label="Tablero de tareas">
           {columns.map((column) => (
-            <Column
-              key={column.id}
-              column={column}
-              hasTasks={items.some((item) => item.columnId === column.id)}
-            >
+            <Column key={column.id} column={column} projectId={board?.projectId ?? projectId}>
               {grouped[column.id]?.map(([label, groupedItems]) => (
                 <section className="kanban-group" key={label}>
                   <h3>{group === 'none' ? undefined : label}</h3>

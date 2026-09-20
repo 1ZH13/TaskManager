@@ -66,7 +66,9 @@ function ErrorNotice({ error, onRetry }: { error: RepositoryError | null; onRetr
 }
 export function WorkspaceContent({ segments }: { segments: string[] }) {
   const { phId } = useDemo();
-  const requestedPhId = useSearchParams().get('phId');
+  const searchParams = useSearchParams();
+  const requestedPhId = searchParams.get('phId');
+  const projectId = searchParams.get('projectId') ?? undefined;
   if (requestedPhId && requestedPhId !== phId)
     return (
       <section className="tm-state tm-state--error" role="alert">
@@ -77,16 +79,16 @@ export function WorkspaceContent({ segments }: { segments: string[] }) {
         </p>
       </section>
     );
-  if (segments.includes('validaciones')) return <ValidationPanel />;
-  if (segments.includes('documentos')) return <DocumentsPage />;
-  if (segments.includes('formularios')) return <FormsPage />;
+  if (segments.includes('validaciones')) return <ValidationPanel projectId={projectId} />;
+  if (segments.includes('documentos')) return <DocumentsPage projectId={projectId} />;
+  if (segments.includes('formularios')) return <FormsPage projectId={projectId} />;
   if (segments.includes('proveedores')) return <ProvidersPage />;
   if (segments.includes('notificaciones')) return <NotificationsPage />;
   if (segments.includes('actividad')) return <ActivityPage />;
-  if (segments.includes('informes')) return <ReportsPage projectId={segments.includes('operaciones') ? demoIds.opsProject : undefined} />;
-  if (segments.includes('lista')) return <SynchronizedViews view="list" />;
-  if (segments.includes('calendario')) return <SynchronizedViews view="calendar" />;
-  if (segments.includes('cronograma')) return <SynchronizedViews view="timeline" />;
+  if (segments.includes('informes')) return <ReportsPage projectId={projectId} />;
+  if (segments.includes('lista')) return <SynchronizedViews view="list" projectId={projectId} />;
+  if (segments.includes('calendario')) return <SynchronizedViews view="calendar" projectId={projectId} />;
+  if (segments.includes('cronograma')) return <SynchronizedViews view="timeline" projectId={projectId} />;
   if (segments.includes('tablero')) return <OperationalBoard />;
   if (segments.includes('tareas')) return <TaskPage />;
   const section = segments[0] ?? '';
@@ -630,7 +632,7 @@ function TaskCollaboration({
     </section>
   );
 }
-function ValidationPanel() {
+function ValidationPanel({ projectId = demoIds.opsProject }: { projectId?: string }) {
   const { phId, actor, repository } = useDemo();
   const [items, setItems] = useState<WorkItem[] | null>(null);
   const [error, setError] = useState<RepositoryError | null>(null);
@@ -638,10 +640,10 @@ function ValidationPanel() {
   const load = useCallback(() => {
     setError(null);
     void repository
-      .listWorkItems({ phId, projectId: demoIds.opsProject })
+      .listWorkItems({ phId, projectId })
       .then((page) => setItems(page.items))
       .catch(setError);
-  }, [repository, phId]);
+  }, [repository, phId, projectId]);
   useEffect(load, [load]);
   const submitEvidence = (item: WorkItem) =>
     void repository
@@ -675,7 +677,7 @@ function ValidationPanel() {
       .catch(setError);
   return (
     <section className="workspace-page">
-      <p className="eyebrow">Gestión operativa</p>
+      <p className="eyebrow">Validación de proyecto</p>
       <h1>Validaciones</h1>
       <p>Demostración de evidencia y aprobación según el rol seleccionado.</p>
       {notice && <p role="status">{notice}</p>}
@@ -873,14 +875,12 @@ function ProjectsPage({ module }: { module?: Project['module'] }) {
                     <span>{project.description ?? 'Sin descripción'}</span>
                   </div>
                   <div>
-                    {module === 'OPERATIONS' && (
-                      <Link
-                        className="tm-button tm-button--secondary"
-                        href="/operaciones/mantenimiento/tablero"
-                      >
-                        Abrir tablero
-                      </Link>
-                    )}
+                    <Link
+                      className="tm-button tm-button--secondary"
+                      href={`/${module === 'ADMINISTRATIVE' ? 'administrativa' : module === 'ACCOUNTING' ? 'contabilidad' : 'operaciones'}/tablero?projectId=${project.id}`}
+                    >
+                      Abrir tablero
+                    </Link>
                     <StatusBadge tone={project.status === 'ARCHIVED' ? 'warning' : 'success'}>
                       {project.status === 'ARCHIVED' ? 'Archivado' : 'Activo'}
                     </StatusBadge>

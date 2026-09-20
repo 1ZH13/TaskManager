@@ -1,2 +1,6 @@
+import Link from 'next/link';
+import { ArrowUpRight, BarChart3, FolderKanban, UsersRound } from 'lucide-react';
 import { AppShell } from '../components/app-shell';
-export default function Home() { return <AppShell><section className="welcome"><p className="eyebrow">Propiedad horizontal</p><h1>Bienvenido a TaskManager</h1><p>Selecciona un módulo para comenzar a organizar el trabajo de tu propiedad.</p></section></AppShell>; }
+export default function Home() {
+  return <AppShell><section className="welcome home-hero"><p className="eyebrow">Propiedad horizontal</p><h1>Organiza el trabajo de tu propiedad.</h1><p>Centraliza proyectos, equipos y tareas operativas en un espacio claro para decidir y avanzar.</p><div className="home-actions"><Link className="tm-button" href="/operaciones">Ver proyectos <ArrowUpRight size={17} /></Link><Link className="home-secondary-link" href="/informes">Revisar informes</Link></div><section className="home-modules" aria-label="Accesos principales"><Link href="/operaciones"><FolderKanban size={23} /><span><strong>Proyectos y tareas</strong><small>Planifica, asigna y da seguimiento.</small></span><ArrowUpRight size={18} /></Link><Link href="/equipos"><UsersRound size={23} /><span><strong>Personas y equipos</strong><small>Coordina responsabilidades y miembros.</small></span><ArrowUpRight size={18} /></Link><Link href="/informes"><BarChart3 size={23} /><span><strong>Informes</strong><small>Consulta el estado del trabajo.</small></span><ArrowUpRight size={18} /></Link></section></section></AppShell>;
+}

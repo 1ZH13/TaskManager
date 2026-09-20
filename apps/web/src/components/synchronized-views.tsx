@@ -9,9 +9,10 @@ import {
   timelineAlerts,
 } from '@task-manager/domain';
 import { demoIds, type RepositoryError } from '@task-manager/data';
-import type { BoardColumn, Person, WorkItem } from '@task-manager/shared';
+import type { Board, BoardColumn, Person, WorkItem } from '@task-manager/shared';
 import { Button } from '../../../../packages/ui/src/index';
-import { useDemo } from './demo-context';
+import { demoSeed, useDemo } from './demo-context';
+import { FilterSelect } from './filter-select';
 
 type View = 'list' | 'calendar' | 'timeline';
 const today = '2026-09-19';
@@ -40,10 +41,19 @@ const listColumns = listColumnHelper.columns([
   listColumnHelper.accessor('startsOn', { header: 'Inicio' }),
 ]);
 
-export function SynchronizedViews({ view }: { view: View }) {
+export function SynchronizedViews({
+  view,
+  projectId = demoIds.opsProject,
+}: {
+  view: View;
+  projectId?: string;
+}) {
   const { phId, actor, repository } = useDemo();
+  const projectName =
+    demoSeed.projects.find((project) => project.id === projectId)?.name ?? 'Proyecto';
   const [items, setItems] = useState<WorkItem[]>([]);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
+  const [boards, setBoards] = useState<Board[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [query, setQuery] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
@@ -53,17 +63,23 @@ export function SynchronizedViews({ view }: { view: View }) {
   const [error, setError] = useState<RepositoryError | null>(null);
   const load = useCallback(() => {
     void Promise.all([
-      repository.listWorkItems({ phId, projectId: demoIds.opsProject }),
-      repository.listBoardColumns({ phId, boardId: demoIds.opsBoard }),
+      repository.listWorkItems({ phId, projectId }),
+      repository.listBoards({ phId, projectId }),
       repository.listPeople({ phId }),
     ])
-      .then(([page, boardColumns, nextPeople]) => {
+      .then(async ([page, nextBoards, nextPeople]) => {
+        const boardColumns = (
+          await Promise.all(
+            nextBoards.map((board) => repository.listBoardColumns({ phId, boardId: board.id })),
+          )
+        ).flat();
         setItems(page.items);
         setColumns(boardColumns);
+        setBoards(nextBoards);
         setPeople(nextPeople);
       })
       .catch(setError);
-  }, [phId, repository]);
+  }, [phId, projectId, repository]);
   useEffect(load, [load]);
   const filtered = useMemo(
     () => selectWorkItems(items, columns, { query, assigneeId: assigneeId || undefined }),
@@ -96,12 +112,13 @@ export function SynchronizedViews({ view }: { view: View }) {
       .catch(setError);
   const createForDate = (startsOn: string) => {
     const column = columns[0];
-    if (!column) return;
+    const board = boards[0];
+    if (!column || !board) return;
     void repository
       .createWorkItem({
         phId,
-        projectId: demoIds.opsProject,
-        boardId: demoIds.opsBoard,
+        projectId,
+        boardId: board.id,
         columnId: column.id,
         key: `OPS-${items.length + 1}`,
         type: 'TASK',
@@ -123,15 +140,16 @@ export function SynchronizedViews({ view }: { view: View }) {
   };
   const createRecurring = (form: FormData) => {
     const column = columns[0];
-    if (!column) return;
+    const board = boards[0];
+    if (!column || !board) return;
     const startsOn = String(form.get('startsOn'));
     const endsOn = String(form.get('endsOn')) || undefined;
     const occurrenceCount = Number(form.get('occurrenceCount')) || undefined;
     void repository
       .createWorkItem({
         phId,
-        projectId: demoIds.opsProject,
-        boardId: demoIds.opsBoard,
+        projectId,
+        boardId: board.id,
         columnId: column.id,
         key: `OPS-${items.length + 1}`,
         type: 'RECURRING_TASK',
@@ -169,7 +187,7 @@ export function SynchronizedViews({ view }: { view: View }) {
     <section className="workspace-page synced-view">
       <header className="view-heading">
         <div>
-          <p className="eyebrow">Mantenimiento preventivo</p>
+          <p className="eyebrow">{projectName}</p>
           <h1>
             {view === 'list'
               ? 'Lista de tareas'
@@ -362,17 +380,15 @@ function ListView({
             placeholder="Clave, título o descripción"
           />
         </label>
-        <label>
-          Responsable
-          <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
-            <option value="">Todos</option>
-            {people.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
+        <FilterSelect
+          label="Responsable"
+          value={assigneeId}
+          options={[
+            { label: 'Todos', value: '' },
+            ...people.map((person) => ({ label: person.displayName, value: person.id })),
+          ]}
+          onChange={setAssigneeId}
+        />
       </div>
       <p role="status">{selected.length} tareas seleccionadas</p>
       <TanStackList items={items} />
@@ -530,7 +546,7 @@ function CalendarView({
             ))}
         </ul>
       ) : (
-        <>
+        <div className="calendar-workspace">
           <div className="calendar-grid">
             {days.map((day) => (
               <section
@@ -552,13 +568,14 @@ function CalendarView({
                     </article>
                   ))}
                 <button
+                  className="calendar-create-task"
                   aria-label={`Crear tarea el ${label(day)}`}
                   onClick={() => createForDate(day)}
                 >
                   + Crear tarea
                 </button>
-                <label>
-                  Asignar fecha
+                <label className="calendar-date-control">
+                  <span className="sr-only">Asignar fecha</span>
                   <input
                     type="date"
                     onChange={(event) => {
@@ -597,7 +614,7 @@ function CalendarView({
               <p>Sin tareas pendientes de fecha.</p>
             )}
           </aside>
-        </>
+        </div>
       )}
     </>
   );
