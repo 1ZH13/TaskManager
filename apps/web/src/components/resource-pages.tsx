@@ -344,8 +344,8 @@ export function ProvidersPage() {
       <h1>Proveedores</h1>
       <p>Gestiona el catálogo operativo; no incluye pagos ni gestión financiera.</p>
       {actor.role === 'ADMIN' && <div className="toolbar"><IconButton label="Agregar proveedor" onClick={() => { setCreating(true); setEditing(null); }}><Plus size={18} /></IconButton></div>}
-      <label>
-        Buscar proveedor
+      <label className="provider-search">
+        <span>Buscar proveedor</span>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -364,8 +364,10 @@ export function ProvidersPage() {
       {!data ? (
         <div className="tm-skeleton" />
       ) : (
-        <ul className="entity-list">
-          {data.providers
+        <div className="resource-table-wrap">
+          <table className="resource-table">
+            <thead><tr><th scope="col">Proveedor</th><th scope="col">Referencia</th><th scope="col">Actividad</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+            <tbody>{data.providers
             .filter((provider) =>
               `${provider.name} ${provider.externalId}`.toLowerCase().includes(query.toLowerCase()),
             )
@@ -376,40 +378,22 @@ export function ProvidersPage() {
                   data.columns.find((column) => column.id === item.columnId)?.category !== 'DONE',
               );
               const documents = data.documents.filter((item) => item.providerId === provider.id);
-              const projectIds = new Set(work.map((item) => item.projectId));
-              const projects = data.projects.filter((item) => projectIds.has(item.id));
-              const forms = data.forms.filter(
-                (item) => item.projectId && projectIds.has(item.projectId),
-              );
               const activity = data.activity.filter((item) =>
                 work.some((workItem) => workItem.id === item.workItemId),
               );
               return (
-                <li key={provider.id}>
-                  <div>
-                    <strong>{provider.name}</strong>
-                    <span>
-                      {provider.externalId} · {provider.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
-                    </span>
-                    <small>
-                      Sincronizado:{' '}
-                      {provider.syncedAt
-                        ? new Date(provider.syncedAt).toLocaleString('es-PA')
-                        : 'Pendiente'}{' '}
-                      · {openWork.length} trabajo abierto · {documents.length} documentos
-                    </small>
-                    <small>
-                      Proyectos: {projects.map((item) => item.name).join(', ') || 'Sin referencias'}{' '}
-                      · Formularios:{' '}
-                      {forms.map((item) => item.name).join(', ') || 'Sin referencias'} · Actividad:{' '}
-                      {activity.length}
-                    </small>
-                  </div>
-                  <div className="entity-actions"><StatusBadge tone={provider.syncedAt ? 'success' : 'warning'}>{provider.syncedAt ? 'Sincronizado' : 'Pendiente'}</StatusBadge>{actor.role === 'ADMIN' && <><IconButton label={`Editar ${provider.name}`} onClick={() => { setEditing(provider); setCreating(false); }}><Pencil size={16} /></IconButton><IconButton label={`Eliminar ${provider.name}`} onClick={() => { if (window.confirm(`¿Eliminar ${provider.name}?`)) void repository.deleteProvider(phId, provider.id, provider.version).then(load).catch(setError); }}><Trash2 size={16} /></IconButton></>}</div>
-                </li>
+                <tr key={provider.id}>
+                  <td><strong>{provider.name}</strong><small>{provider.legalName ?? 'Sin razón social'}</small></td>
+                  <td>{provider.externalId}<small>{provider.taxId ?? 'Sin identificación fiscal'}</small></td>
+                  <td>{openWork.length} trabajo{openWork.length === 1 ? '' : 's'} abierto{openWork.length === 1 ? '' : 's'}<small>{documents.length} documentos · {activity.length} actividades</small></td>
+                  <td className="resource-table__status"><StatusBadge tone={provider.status === 'ACTIVE' ? 'success' : 'warning'}>{provider.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</StatusBadge><small>{provider.syncedAt ? 'Sincronizado' : 'Pendiente'}</small></td>
+                  <td><div className="resource-table__actions">{actor.role === 'ADMIN' && <><IconButton label={`Editar ${provider.name}`} onClick={() => { setEditing(provider); setCreating(false); }}><Pencil size={16} /></IconButton><IconButton label={`Eliminar ${provider.name}`} onClick={() => { if (window.confirm(`¿Eliminar ${provider.name}?`)) void repository.deleteProvider(phId, provider.id, provider.version).then(load).catch(setError); }}><Trash2 size={16} /></IconButton></>}</div></td>
+                </tr>
               );
             })}
-        </ul>
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

@@ -11,6 +11,8 @@ import {
 import { demoIds, type RepositoryError } from '@task-manager/data';
 import type { Board, BoardColumn, Person, WorkItem } from '@task-manager/shared';
 import { Button } from '../../../../packages/ui/src/index';
+import { IconButton } from '../../../../packages/ui/src/index';
+import { Pencil, Trash2 } from 'lucide-react';
 import { demoSeed, useDemo } from './demo-context';
 import { FilterSelect } from './filter-select';
 
@@ -43,12 +45,25 @@ const addDays = (date: string, amount: number) => {
 };
 const daysBetween = (from: string, to: string) =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+const priorityLabel: Record<WorkItem['priority'], string> = {
+  LOW: 'Baja',
+  MEDIUM: 'Media',
+  HIGH: 'Alta',
+  URGENT: 'Urgente',
+};
+const recurrenceLabel: Record<NonNullable<WorkItem['recurrence']>['frequency'], string> = {
+  DAILY: 'Diaria',
+  WEEKLY: 'Semanal',
+  MONTHLY: 'Mensual',
+  ANNUAL: 'Anual',
+  CUSTOM: 'Personalizada',
+};
 const listFeatures = tableFeatures({});
 const listColumnHelper = createColumnHelper<typeof listFeatures, WorkItem>();
 const listColumns = listColumnHelper.columns([
   listColumnHelper.accessor('key', { header: 'Clave' }),
   listColumnHelper.accessor('title', { header: 'Tarea' }),
-  listColumnHelper.accessor('priority', { header: 'Prioridad' }),
+  listColumnHelper.accessor('priority', { header: 'Prioridad', cell: (info) => priorityLabel[info.getValue()] }),
   listColumnHelper.accessor('startsOn', { header: 'Inicio' }),
 ]);
 
@@ -68,6 +83,8 @@ export function SynchronizedViews({
   const [people, setPeople] = useState<Person[]>([]);
   const [query, setQuery] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
+  const [startsFrom, setStartsFrom] = useState('');
+  const [startsTo, setStartsTo] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [calendarMode, setCalendarMode] = useState<'month' | 'week' | 'agenda'>('week');
   const [zoom, setZoom] = useState<'week' | 'month' | 'quarter'>('month');
@@ -93,8 +110,13 @@ export function SynchronizedViews({
   }, [phId, projectId, repository]);
   useEffect(load, [load]);
   const filtered = useMemo(
-    () => selectWorkItems(items, columns, { query, assigneeId: assigneeId || undefined }),
-    [items, columns, query, assigneeId],
+    () =>
+      selectWorkItems(items, columns, { query, assigneeId: assigneeId || undefined }).filter(
+        (item) =>
+          (!startsFrom || (item.startsOn ?? item.dueOn ?? '') >= startsFrom) &&
+          (!startsTo || (item.startsOn ?? item.dueOn ?? '') <= startsTo),
+      ),
+    [items, columns, query, assigneeId, startsFrom, startsTo],
   );
   const updateDate = (item: WorkItem, startsOn: string) =>
     void repository
@@ -171,7 +193,7 @@ export function SynchronizedViews({
         startsOn,
         dueOn: startsOn,
         recurrence: {
-          frequency: String(form.get('frequency')) as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM',
+          frequency: String(form.get('frequency')) as NonNullable<WorkItem['recurrence']>['frequency'],
           interval: Number(form.get('interval')) || 1,
           startsOn,
           ...(endsOn ? { endsOn } : { occurrenceCount: occurrenceCount || 10 }),
@@ -224,7 +246,13 @@ export function SynchronizedViews({
           setQuery={setQuery}
           assigneeId={assigneeId}
           setAssigneeId={setAssigneeId}
+          startsFrom={startsFrom}
+          setStartsFrom={setStartsFrom}
+          startsTo={startsTo}
+          setStartsTo={setStartsTo}
           canSelect={actor.role === 'ADMIN'}
+          canEdit={actor.role === 'ADMIN'}
+          onDelete={(item) => void repository.deleteWorkItem(phId, item.id, item.version).then(load).catch(setError)}
         />
       ) : view === 'calendar' ? (
         <CalendarView
@@ -274,6 +302,7 @@ function RecurrenceComposer({
             <option value="DAILY">Diaria</option>
             <option value="WEEKLY">Semanal</option>
             <option value="MONTHLY">Mensual</option>
+            <option value="ANNUAL">Anual</option>
             <option value="CUSTOM">Personalizada</option>
           </select>
         </label>
@@ -364,7 +393,13 @@ function ListView({
   setQuery,
   assigneeId,
   setAssigneeId,
+  startsFrom,
+  setStartsFrom,
+  startsTo,
+  setStartsTo,
   canSelect,
+  canEdit,
+  onDelete,
 }: {
   items: WorkItem[];
   columns: BoardColumn[];
@@ -378,8 +413,15 @@ function ListView({
   setQuery: (value: string) => void;
   assigneeId: string;
   setAssigneeId: (id: string) => void;
+  startsFrom: string;
+  setStartsFrom: (date: string) => void;
+  startsTo: string;
+  setStartsTo: (date: string) => void;
   canSelect: boolean;
+  canEdit: boolean;
+  onDelete: (item: WorkItem) => void;
 }) {
+  const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
   return (
     <>
       <div className="view-controls">
@@ -400,52 +442,32 @@ function ListView({
           ]}
           onChange={setAssigneeId}
         />
+        <label className="view-filter view-filter--date">
+          Desde
+          <input aria-label="Filtrar tareas desde" type="date" value={startsFrom} max={startsTo || undefined} onChange={(event) => setStartsFrom(event.target.value)} />
+        </label>
+        <label className="view-filter view-filter--date">
+          Hasta
+          <input aria-label="Filtrar tareas hasta" type="date" value={startsTo} min={startsFrom || undefined} onChange={(event) => setStartsTo(event.target.value)} />
+        </label>
       </div>
       <p role="status">{selected.length} tareas seleccionadas</p>
       <TanStackList items={items} />
       <div className="task-table" role="table" aria-label="Lista de tareas">
         <div role="row" className="task-table__head">
-          <span>Seleccionar</span>
-          <span>Tarea</span>
+          <span>ID de la tarea</span>
+          <span>Nombre de la tarea</span>
+          <span>Descripción de la tarea</span>
+          <span>Recurrencia</span>
           <span>Estado</span>
-          <span>Prioridad</span>
-          <span>Inicio</span>
+          <span>Acciones</span>
         </div>
         {items.map((item) => (
           <div role="row" key={item.id}>
-            <span>
-              {canSelect ? (
-                <input
-                  aria-label={`Seleccionar ${item.title}`}
-                  type="checkbox"
-                  checked={selected.includes(item.id)}
-                  onChange={(event) =>
-                    setSelected(
-                      event.target.checked
-                        ? [...selected, item.id]
-                        : selected.filter((id) => id !== item.id),
-                    )
-                  }
-                />
-              ) : (
-                '—'
-              )}
-            </span>
-            <strong>
-              {item.key} · {item.title}
-              <select
-                aria-label={`Responsable de ${item.title}`}
-                value={item.assigneeId ?? ''}
-                onChange={(event) => update(item, { assigneeId: event.target.value || undefined })}
-              >
-                <option value="">Sin asignar</option>
-                {people.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.displayName}
-                  </option>
-                ))}
-              </select>
-            </strong>
+            <strong>{item.key}</strong>
+            <strong>{item.title}</strong>
+            <span>{item.description ?? 'Sin descripción'}</span>
+            <span>{item.recurrence ? recurrenceLabel[item.recurrence.frequency] : 'No recurrente'}</span>
             <select
               aria-label={`Estado de ${item.title}`}
               value={item.columnId}
@@ -457,31 +479,39 @@ function ListView({
                 </option>
               ))}
             </select>
-            <select
-              aria-label={`Prioridad de ${item.title}`}
-              value={item.priority}
-              onChange={(event) =>
-                update(item, { priority: event.target.value as WorkItem['priority'] })
-              }
-            >
-              {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map((priority) => (
-                <option key={priority} value={priority}>
-                  {priority}
-                </option>
-              ))}
-            </select>
-            <label>
-              <span className="sr-only">Inicio de {item.title}</span>
-              <input
-                type="date"
-                value={item.startsOn ?? ''}
-                onChange={(event) => updateDate(item, event.target.value)}
-              />
-            </label>
+            <span className="task-table__actions">
+              {canEdit && <>
+                <IconButton label={`Editar ${item.title}`} onClick={() => setEditingItem(item)}><Pencil size={16} /></IconButton>
+                <IconButton label={`Eliminar ${item.title}`} onClick={() => {
+                  if (window.confirm(`¿Eliminar ${item.title}?`)) onDelete(item);
+                }}><Trash2 size={16} /></IconButton>
+              </>}
+            </span>
           </div>
         ))}
       </div>
+      {editingItem && <TaskEditModal item={editingItem} onClose={() => setEditingItem(null)} onSave={(change) => { update(editingItem, change); setEditingItem(null); }} />}
     </>
+  );
+}
+function TaskEditModal({ item, onClose, onSave }: { item: WorkItem; onClose: () => void; onSave: (change: Partial<WorkItem>) => void }) {
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get('title')).trim();
+    if (title) onSave({ title, description: String(form.get('description')).trim() || undefined });
+  };
+  return (
+    <div className="task-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
+        <header><div><p className="eyebrow">Editar tarea</p><h2 id="task-modal-title">{item.key}</h2></div><button className="task-modal__close" type="button" aria-label="Cerrar" onClick={onClose}>×</button></header>
+        <form onSubmit={submit}>
+          <label>Nombre de la tarea<input name="title" defaultValue={item.title} required autoFocus /></label>
+          <label>Descripción<textarea name="description" defaultValue={item.description} placeholder="Agrega una descripción" /></label>
+          <footer><Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar cambios</Button></footer>
+        </form>
+      </section>
+    </div>
   );
 }
 function CalendarView({
