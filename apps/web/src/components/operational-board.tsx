@@ -30,6 +30,13 @@ import type {
 } from '@task-manager/shared';
 import { useDemo } from './demo-context';
 
+const priorityLabel: Record<WorkItem['priority'], string> = {
+  LOW: 'Baja',
+  MEDIUM: 'Media',
+  HIGH: 'Alta',
+  URGENT: 'Urgente',
+};
+
 function Column({
   column,
   projectId,
@@ -234,7 +241,7 @@ function Card({
         {item.key} · {item.title}
       </button>
       <small>
-        {item.priority} · {item.type}
+        {priorityLabel[item.priority]} · {item.type}
       </small>
       <label className="task-assignee" aria-label={`Asignar ${item.title}`}>
         <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -758,7 +765,7 @@ export function OperationalBoard() {
             <option value="">Todos</option>
             {['TASK', 'RECURRING_TASK', 'INCIDENT', 'SUBTASK', 'MILESTONE'].map((entry) => (
               <option key={entry} value={entry}>
-                {entry}
+                {priorityLabel[entry as WorkItem['priority']]}
               </option>
             ))}
           </select>
@@ -1045,7 +1052,7 @@ function TaskEditor({
           Prioridad
           <select name="priority" defaultValue={item.priority}>
             {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map((entry) => (
-              <option key={entry}>{entry}</option>
+              <option key={entry} value={entry}>{priorityLabel[entry as WorkItem['priority']]}</option>
             ))}
           </select>
         </label>

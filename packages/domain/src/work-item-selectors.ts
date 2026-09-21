@@ -23,6 +23,7 @@ function nextDate(date: Date, rule: RecurrenceRule) {
   if (rule.frequency === 'DAILY') return new Date(date.getTime() + rule.interval * 86_400_000);
   if (rule.frequency === 'WEEKLY') return new Date(date.getTime() + rule.interval * 7 * 86_400_000);
   if (rule.frequency === 'MONTHLY') return addMonths(date, rule.interval);
+  if (rule.frequency === 'ANNUAL') return addMonths(date, rule.interval * 12);
   return new Date(date.getTime() + rule.interval * 86_400_000);
 }
 
