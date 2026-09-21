@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Bookmark, CalendarDays, ChevronDown, GripVertical, MoreHorizontal, UserRound } from 'lucide-react';
 import { demoIds, type RepositoryError } from '@task-manager/data';
 import { checkWorkItemTransition } from '@task-manager/domain';
 import { Button } from '../../../../packages/ui/src/index';
@@ -31,55 +32,44 @@ import { useDemo } from './demo-context';
 
 function Column({
   column,
+  projectId,
   children,
-  hasTasks,
+  itemCount,
+  canMoveLeft,
+  canMoveRight,
+  onMove,
 }: {
   column: BoardColumn;
+  projectId: string;
   children: React.ReactNode;
-  hasTasks: boolean;
+  itemCount: number;
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
+  onMove: (offset: number) => void;
 }) {
   const { actor, repository } = useDemo();
   const [editing, setEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [limitOpen, setLimitOpen] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: column.id });
+  const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({
+    id: `column:${column.id}`,
+    disabled: actor.role !== 'ADMIN',
+  });
+  const setNodeRef = (node: HTMLElement | null) => {
+    setDropRef(node);
+    setDragRef(node);
+  };
   const refresh = () => window.location.reload();
-  const save = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
+  const saveName = (name: string) => {
+    const nextName = name.trim();
+    setEditing(false);
+    if (!nextName || nextName === column.name) return;
     void repository
-      .updateBoardColumn(column.id, {
-        name: String(form.get('name')),
-        color: String(form.get('color')),
-        category: String(form.get('category')) as BoardColumn['category'],
-      })
+      .updateBoardColumn(column.id, { name: nextName })
       .then(refresh);
   };
-  const add = () =>
-    void repository
-      .createBoardColumn({
-        phId: column.phId,
-        boardId: column.boardId,
-        name: 'Nueva columna',
-        category: 'TODO',
-        color: '#64748B',
-        position: column.position + 1,
-      })
-      .then(refresh);
-  const shift = (offset: number) =>
-    void repository
-      .listBoardColumns({ phId: column.phId, boardId: column.boardId })
-      .then((columns) => {
-        const index = columns.findIndex((entry) => entry.id === column.id);
-        const target = index + offset;
-        if (target < 0 || target >= columns.length) return;
-        [columns[index], columns[target]] = [columns[target]!, columns[index]!];
-        return repository.reorderBoardColumns(
-          column.phId,
-          column.boardId,
-          columns.map((entry) => entry.id),
-        );
-      })
-      .then(refresh);
   const remove = () => {
     if (window.confirm(`¿Eliminar la columna ${column.name}?`))
       void repository
@@ -87,13 +77,26 @@ function Column({
         .then(refresh)
         .catch((failure: RepositoryError) => window.alert(failure.message));
   };
+  const saveLimit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const minimum = String(form.get('minimum') ?? '');
+    const maximum = String(form.get('maximum') ?? '');
+    const minItems = minimum === '' ? undefined : Number(minimum);
+    const maxItems = maximum === '' ? undefined : Number(maximum);
+    if (minItems !== undefined && maxItems !== undefined && minItems > maxItems) {
+      window.alert('El mínimo no puede ser mayor que el máximo.');
+      return;
+    }
+    void repository.updateBoardColumn(column.id, { minItems, maxItems }).then(refresh);
+  };
   const createTask = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const title = String(new FormData(event.currentTarget).get('title'));
     void repository
       .createWorkItem({
         phId: column.phId,
-        projectId: demoIds.opsProject,
+        projectId,
         boardId: column.boardId,
         columnId: column.id,
         key: 'TEMP-0',
@@ -112,71 +115,88 @@ function Column({
   };
   return (
     <section ref={setNodeRef} className="kanban-column" data-over={isOver || undefined}>
-      <h2>
-        {column.name}
-        {actor.role === 'ADMIN' && (
-          <>
-            <button
-              className="column-edit"
-              aria-label={`Mover ${column.name} antes`}
-              onClick={() => shift(-1)}
-            >
-              ‹
-            </button>
-            <button
-              className="column-edit"
-              aria-label={`Mover ${column.name} después`}
-              onClick={() => shift(1)}
-            >
-              ›
-            </button>
-            <button
-              className="column-edit"
-              aria-label={`Crear columna después de ${column.name}`}
-              onClick={add}
-            >
-              ＋
-            </button>
-            <button
-              className="column-edit"
-              aria-label={`Editar columna ${column.name}`}
-              onClick={() => setEditing(!editing)}
-            >
-              ⋯
-            </button>
-          </>
-        )}
-      </h2>
-      {editing && (
-        <form className="column-editor" onSubmit={save}>
-          <input name="name" defaultValue={column.name} required />
-          <select name="category" defaultValue={column.category}>
-            {['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE'].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-          <input name="color" type="color" defaultValue={column.color} />
-          <button>Guardar</button>
-          <button type="button" className="column-delete" onClick={remove}>
-            Eliminar
+      <header className="column-header">
+        {editing ? (
+          <input
+            className="column-name-input"
+            aria-label="Nombre de la columna"
+            autoFocus
+            defaultValue={column.name}
+            onBlur={(event) => saveName(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+              if (event.key === 'Escape') setEditing(false);
+            }}
+          />
+        ) : (
+          <button
+            className="column-title"
+            aria-label={actor.role === 'ADMIN' ? `Renombrar columna ${column.name}` : undefined}
+            disabled={actor.role !== 'ADMIN'}
+            onDoubleClick={() => setEditing(true)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') setEditing(true);
+            }}
+            title={actor.role === 'ADMIN' ? 'Doble clic para cambiar el nombre' : undefined}
+          >
+            {column.name}
           </button>
-        </form>
+        )}
+        <span className="column-count" aria-label={`${itemCount} tareas`}>{itemCount}</span>
+        {actor.role === 'ADMIN' && (
+          <div className="column-actions">
+            <button className="column-icon-button column-drag-handle" aria-label={`Arrastrar ${column.name}`} title="Arrastrar columna" {...attributes} {...listeners}>
+              <GripVertical size={16} aria-hidden="true" />
+            </button>
+            <button
+              className="column-icon-button"
+              aria-label={`Opciones de ${column.name}`}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MoreHorizontal size={17} aria-hidden="true" />
+            </button>
+            {menuOpen && (
+              <div className="column-menu" role="menu">
+                <button role="menuitem" onClick={() => { setLimitOpen(true); setMenuOpen(false); }}>Establecer límite de columna</button>
+                {canMoveLeft && <button role="menuitem" onClick={() => { onMove(-1); setMenuOpen(false); }}>Mover columna a la izquierda</button>}
+                {canMoveRight && <button role="menuitem" onClick={() => { onMove(1); setMenuOpen(false); }}>Mover columna a la derecha</button>}
+                <button className="column-menu-delete" role="menuitem" onClick={remove}>Eliminar columna</button>
+              </div>
+            )}
+          </div>
+        )}
+      </header>
+      {limitOpen && (
+        <div className="column-limit-backdrop" role="presentation">
+          <form className="column-limit-dialog" role="dialog" aria-modal="true" aria-label="Límite de columna" onSubmit={saveLimit}>
+            <div><h3>Límite de columna</h3><button type="button" aria-label="Cerrar" onClick={() => setLimitOpen(false)}>×</button></div>
+            <p>Define el mínimo y máximo de tareas permitidas en esta columna.</p>
+            <label>Mínimo<input name="minimum" type="number" min="0" defaultValue={column.minItems ?? ''} placeholder="Sin límite" /></label>
+            <label>Máximo<input name="maximum" type="number" min="1" defaultValue={column.maxItems ?? ''} placeholder="Sin límite" /></label>
+            <footer><button type="button" onClick={() => setLimitOpen(false)}>Cancelar</button><button>Guardar</button></footer>
+          </form>
+        </div>
       )}
-      {actor.role === 'ADMIN' && !hasTasks && !creatingTask && (
+      {children}
+      {actor.role === 'ADMIN' && !creatingTask && (
         <button className="column-create-task" onClick={() => setCreatingTask(true)}>
-          ＋ Crear tarea
+          ＋ Crear
         </button>
       )}
       {creatingTask && (
         <form className="column-create-form" onSubmit={createTask}>
-          <input name="title" autoFocus placeholder="Título de la tarea" required />
-          <button>Crear</button>
-          <button type="button" onClick={() => setCreatingTask(false)}>
-            Cancelar
-          </button>
+          <input name="title" autoFocus placeholder="¿Qué hay que hacer?" required />
+          <div className="column-create-actions">
+            <span aria-hidden="true"><Bookmark size={15} /></span>
+            <span aria-hidden="true"><ChevronDown size={15} /></span>
+            <span aria-hidden="true"><CalendarDays size={15} /></span>
+            <span aria-hidden="true"><UserRound size={15} /></span>
+            <button type="submit">Crear</button>
+            <button type="button" aria-label="Cancelar creación" onClick={() => setCreatingTask(false)}>×</button>
+          </div>
         </form>
       )}
-      {children}
     </section>
   );
 }
@@ -193,7 +213,6 @@ function Card({
 }) {
   const { phId, actor, repository } = useDemo();
   const [people, setPeople] = useState<Person[]>([]);
-  const [creatingNext, setCreatingNext] = useState(false);
   useEffect(() => {
     void repository.listPeople({ phId }).then(setPeople);
   }, [phId, repository]);
@@ -206,29 +225,6 @@ function Card({
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
-  const createNext = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const title = String(new FormData(event.currentTarget).get('title'));
-    void repository
-      .createWorkItem({
-        phId,
-        projectId: item.projectId,
-        boardId: item.boardId,
-        columnId: item.columnId,
-        key: 'TEMP-0',
-        type: 'TASK',
-        title,
-        priority: 'MEDIUM',
-        reporterId: actor.id,
-        dependencyIds: [],
-        requiresEvidence: false,
-        requiresValidation: false,
-        validationStatus: 'NOT_REQUIRED',
-        position: 0,
-        labels: [],
-      })
-      .then(() => window.location.reload());
-  };
   return (
     <article ref={ref} style={style} className="task-card" {...attributes}>
       <button className="task-grip" aria-label={`Arrastrar ${item.title}`} {...listeners}>
@@ -263,25 +259,6 @@ function Card({
           ))}
         </select>
       </label>
-      {!creatingNext && (
-        <button
-          type="button"
-          className="task-add-below"
-          aria-label={`Crear tarea debajo de ${item.title}`}
-          onClick={() => setCreatingNext(true)}
-        >
-          ＋
-        </button>
-      )}
-      {creatingNext && (
-        <form className="task-add-form" onSubmit={createNext}>
-          <input name="title" autoFocus placeholder="Nueva tarea" required />
-          <button>Crear</button>
-          <button type="button" onClick={() => setCreatingNext(false)}>
-            Cancelar
-          </button>
-        </form>
-      )}
     </article>
   );
 }
@@ -289,11 +266,13 @@ function Card({
 function BoardControls({
   boards,
   current,
+  projectId,
   onSelect,
   onChanged,
 }: {
   boards: Board[];
   current: Board | null;
+  projectId: string;
   onSelect: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -309,7 +288,7 @@ function BoardControls({
       });
     else
       void repository
-        .createBoard({ phId, projectId: demoIds.opsProject, name, teamIds: [] })
+        .createBoard({ phId, projectId, name, teamIds: [] })
         .then(() => {
           setOpen(false);
           onChanged();
@@ -317,7 +296,7 @@ function BoardControls({
   };
   const create = () =>
     void repository
-      .createBoard({ phId, projectId: demoIds.opsProject, name: 'Nuevo tablero', teamIds: [] })
+      .createBoard({ phId, projectId, name: 'Nuevo tablero', teamIds: [] })
       .then((created) => {
         onSelect(created.id);
         onChanged();
@@ -374,6 +353,7 @@ export function OperationalBoard() {
   const pathname = usePathname();
   const params = useSearchParams();
   const boardId = params.get('board');
+  const projectId = params.get('projectId') ?? demoIds.opsProject;
   const [boards, setBoards] = useState<Board[]>([]);
   const [board, setBoard] = useState<Board | null>(null);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
@@ -389,7 +369,7 @@ export function OperationalBoard() {
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
   const load = useCallback(() => {
     void repository
-      .listBoards({ phId, projectId: demoIds.opsProject })
+      .listBoards({ phId, projectId })
       .then(async (nextBoards) => {
         const nextBoard = nextBoards.find((entry) => entry.id === boardId) ?? nextBoards[0];
         if (!nextBoard) return;
@@ -415,7 +395,7 @@ export function OperationalBoard() {
         );
       })
       .catch((failure: RepositoryError) => setError(failure.message));
-  }, [boardId, phId, repository]);
+  }, [boardId, phId, projectId, repository]);
   useEffect(load, [load]);
   const q = params.get('q')?.toLowerCase() ?? '';
   const priority = params.get('priority') ?? '';
@@ -485,13 +465,55 @@ export function OperationalBoard() {
       .catch((failure: RepositoryError) => setError(failure.message));
   };
   const dragEnd = (event: DragEndEvent) => {
+    const activeId = String(event.active.id);
     const item = items.find((candidate) => candidate.id === event.active.id);
     const overId = String(event.over?.id ?? '');
+    if (activeId.startsWith('column:')) {
+      const columnId = activeId.slice('column:'.length);
+      if (!overId || columnId === overId || !columns.some((column) => column.id === overId)) return;
+      const reordered = [...columns];
+      const from = reordered.findIndex((column) => column.id === columnId);
+      const to = reordered.findIndex((column) => column.id === overId);
+      if (from < 0 || to < 0) return;
+      const [moved] = reordered.splice(from, 1);
+      reordered.splice(to, 0, moved!);
+      void repository
+        .reorderBoardColumns(phId, board?.id ?? '', reordered.map((column) => column.id))
+        .then(load)
+        .catch((failure: RepositoryError) => setError(failure.message));
+      return;
+    }
     if (!item) return;
     const targetItem = items.find((candidate) => candidate.id === overId);
     if (targetItem) move(item, targetItem.columnId, targetItem.position);
     else if (columns.some((column) => column.id === overId) && item.columnId !== overId)
       move(item, overId);
+  };
+  const moveColumn = (columnId: string, offset: number) => {
+    if (!board) return;
+    const reordered = [...columns];
+    const from = reordered.findIndex((column) => column.id === columnId);
+    const to = from + offset;
+    if (from < 0 || to < 0 || to >= reordered.length) return;
+    [reordered[from], reordered[to]] = [reordered[to]!, reordered[from]!];
+    void repository
+      .reorderBoardColumns(phId, board.id, reordered.map((column) => column.id))
+      .then(load)
+      .catch((failure: RepositoryError) => setError(failure.message));
+  };
+  const createColumn = () => {
+    if (!board) return;
+    void repository
+      .createBoardColumn({
+        phId,
+        boardId: board.id,
+        name: 'Nueva columna',
+        category: 'TODO',
+        color: '#64748B',
+        position: columns.length,
+      })
+      .then(load)
+      .catch((failure: RepositoryError) => setError(failure.message));
   };
   const filter = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -574,7 +596,7 @@ export function OperationalBoard() {
         {announcement}
       </p>
       {actor.role === 'ADMIN' && (
-        <BoardControls boards={boards} current={board} onSelect={selectBoard} onChanged={load} />
+        <BoardControls boards={boards} current={board} projectId={projectId} onSelect={selectBoard} onChanged={load} />
       )}
       {creating && false && (
         <form className="entity-form" onSubmit={create}>
@@ -846,11 +868,15 @@ export function OperationalBoard() {
       )}
       <DndContext sensors={sensors} onDragEnd={dragEnd}>
         <div className="kanban" aria-label="Tablero de tareas">
-          {columns.map((column) => (
+          {columns.map((column, index) => (
             <Column
               key={column.id}
               column={column}
-              hasTasks={items.some((item) => item.columnId === column.id)}
+              projectId={board?.projectId ?? projectId}
+              itemCount={items.filter((item) => item.columnId === column.id).length}
+              canMoveLeft={index > 0}
+              canMoveRight={index < columns.length - 1}
+              onMove={(offset) => moveColumn(column.id, offset)}
             >
               {grouped[column.id]?.map(([label, groupedItems]) => (
                 <section className="kanban-group" key={label}>
@@ -868,6 +894,11 @@ export function OperationalBoard() {
               ))}
             </Column>
           ))}
+          {actor.role === 'ADMIN' && (
+            <button className="kanban-add-column" onClick={createColumn}>
+              + Añadir columna
+            </button>
+          )}
         </div>
       </DndContext>
       {selected && (

@@ -3,9 +3,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Archive, Pencil, Plus, RotateCcw, UserMinus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { demoIds, type RepositoryError } from '@task-manager/data';
-import { Button, ConflictState, StatusBadge } from '../../../../packages/ui/src/index';
+import { Button, ConflictState, IconButton, StatusBadge } from '../../../../packages/ui/src/index';
 import type { BoardColumn, Person, Project, Team, WorkItem } from '@task-manager/shared';
 import { useDemo } from './demo-context';
 import { OperationalBoard } from './operational-board';
@@ -66,7 +67,9 @@ function ErrorNotice({ error, onRetry }: { error: RepositoryError | null; onRetr
 }
 export function WorkspaceContent({ segments }: { segments: string[] }) {
   const { phId } = useDemo();
-  const requestedPhId = useSearchParams().get('phId');
+  const searchParams = useSearchParams();
+  const requestedPhId = searchParams.get('phId');
+  const projectId = searchParams.get('projectId') ?? undefined;
   if (requestedPhId && requestedPhId !== phId)
     return (
       <section className="tm-state tm-state--error" role="alert">
@@ -77,16 +80,16 @@ export function WorkspaceContent({ segments }: { segments: string[] }) {
         </p>
       </section>
     );
-  if (segments.includes('validaciones')) return <ValidationPanel />;
-  if (segments.includes('documentos')) return <DocumentsPage />;
-  if (segments.includes('formularios')) return <FormsPage />;
+  if (segments.includes('validaciones')) return <ValidationPanel projectId={projectId} />;
+  if (segments.includes('documentos')) return <DocumentsPage projectId={projectId} />;
+  if (segments.includes('formularios')) return <FormsPage projectId={projectId} />;
   if (segments.includes('proveedores')) return <ProvidersPage />;
   if (segments.includes('notificaciones')) return <NotificationsPage />;
   if (segments.includes('actividad')) return <ActivityPage />;
-  if (segments.includes('informes')) return <ReportsPage projectId={segments.includes('operaciones') ? demoIds.opsProject : undefined} />;
-  if (segments.includes('lista')) return <SynchronizedViews view="list" />;
-  if (segments.includes('calendario')) return <SynchronizedViews view="calendar" />;
-  if (segments.includes('cronograma')) return <SynchronizedViews view="timeline" />;
+  if (segments.includes('informes')) return <ReportsPage projectId={projectId} />;
+  if (segments.includes('lista')) return <SynchronizedViews view="list" projectId={projectId} />;
+  if (segments.includes('calendario')) return <SynchronizedViews view="calendar" projectId={projectId} />;
+  if (segments.includes('cronograma')) return <SynchronizedViews view="timeline" projectId={projectId} />;
   if (segments.includes('tablero')) return <OperationalBoard />;
   if (segments.includes('tareas')) return <TaskPage />;
   const section = segments[0] ?? '';
@@ -630,7 +633,7 @@ function TaskCollaboration({
     </section>
   );
 }
-function ValidationPanel() {
+function ValidationPanel({ projectId = demoIds.opsProject }: { projectId?: string }) {
   const { phId, actor, repository } = useDemo();
   const [items, setItems] = useState<WorkItem[] | null>(null);
   const [error, setError] = useState<RepositoryError | null>(null);
@@ -638,10 +641,10 @@ function ValidationPanel() {
   const load = useCallback(() => {
     setError(null);
     void repository
-      .listWorkItems({ phId, projectId: demoIds.opsProject })
+      .listWorkItems({ phId, projectId })
       .then((page) => setItems(page.items))
       .catch(setError);
-  }, [repository, phId]);
+  }, [repository, phId, projectId]);
   useEffect(load, [load]);
   const submitEvidence = (item: WorkItem) =>
     void repository
@@ -675,7 +678,7 @@ function ValidationPanel() {
       .catch(setError);
   return (
     <section className="workspace-page">
-      <p className="eyebrow">Gestión operativa</p>
+      <p className="eyebrow">Validación de proyecto</p>
       <h1>Validaciones</h1>
       <p>Demostración de evidencia y aprobación según el rol seleccionado.</p>
       {notice && <p role="status">{notice}</p>}
@@ -873,14 +876,12 @@ function ProjectsPage({ module }: { module?: Project['module'] }) {
                     <span>{project.description ?? 'Sin descripción'}</span>
                   </div>
                   <div>
-                    {module === 'OPERATIONS' && (
-                      <Link
-                        className="tm-button tm-button--secondary"
-                        href="/operaciones/mantenimiento/tablero"
-                      >
-                        Abrir tablero
-                      </Link>
-                    )}
+                    <Link
+                      className="tm-button tm-button--secondary"
+                      href={`/${module === 'ADMINISTRATIVE' ? 'administrativa' : module === 'ACCOUNTING' ? 'contabilidad' : 'operaciones'}/tablero?projectId=${project.id}`}
+                    >
+                      Abrir tablero
+                    </Link>
                     <StatusBadge tone={project.status === 'ARCHIVED' ? 'warning' : 'success'}>
                       {project.status === 'ARCHIVED' ? 'Archivado' : 'Activo'}
                     </StatusBadge>
@@ -952,6 +953,7 @@ function PeoplePage() {
   const [people, setPeople] = useState<Person[] | null>(null);
   const [error, setError] = useState<RepositoryError | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Person | null>(null);
   const load = useCallback(
     () =>
       void repository.listPeople({ phId, includeInactive: true }).then(setPeople).catch(setError),
@@ -966,15 +968,15 @@ function PeoplePage() {
       <p>Las tarjetas protegen el identificador personal; solo el rol administrativo lo revela.</p>
       <div className="toolbar">
         {actor.role === 'ADMIN' && (
-          <Button onClick={() => setCreating(!creating)}>
-            {creating ? 'Cerrar formulario' : 'Agregar persona'}
-          </Button>
+          <IconButton label="Agregar persona" onClick={() => { setCreating(true); setEditing(null); }}><Plus size={18} /></IconButton>
         )}
       </div>
-      {creating && (
+      {(creating || editing) && (
         <PersonForm
+          person={editing ?? undefined}
           onDone={() => {
             setCreating(false);
+            setEditing(null);
             load();
           }}
           onError={setError}
@@ -995,9 +997,7 @@ function PeoplePage() {
                 </span>
                 {visibleId && <small>Cédula: {person.nationalId}</small>}
               </div>
-              <StatusBadge tone={person.status === 'ACTIVE' ? 'success' : 'warning'}>
-                {person.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
-              </StatusBadge>
+              <div className="entity-actions"><StatusBadge tone={person.status === 'ACTIVE' ? 'success' : 'warning'}>{person.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</StatusBadge>{actor.role === 'ADMIN' && <><IconButton label={`Editar ${person.displayName}`} onClick={() => { setEditing(person); setCreating(false); }}><Pencil size={16} /></IconButton><IconButton label={`${person.status === 'ACTIVE' ? 'Desactivar' : 'Activar'} ${person.displayName}`} onClick={() => void repository.updatePerson(person.id, { version: person.version, status: person.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }).then(load).catch(setError)}><UserMinus size={16} /></IconButton></>}</div>
             </li>
           ))}
         </ul>
@@ -1006,9 +1006,11 @@ function PeoplePage() {
   );
 }
 function PersonForm({
+  person,
   onDone,
   onError,
 }: {
+  person?: Person;
   onDone: () => void;
   onError: (e: RepositoryError) => void;
 }) {
@@ -1018,8 +1020,7 @@ function PersonForm({
     const f = new FormData(e.currentTarget);
     const firstName = String(f.get('firstName'));
     const lastName = String(f.get('lastName'));
-    void repository
-      .createPerson({
+    const input = {
         phId,
         firstName,
         lastName,
@@ -1027,8 +1028,9 @@ function PersonForm({
         nationalId: String(f.get('nationalId')),
         jobTitle: String(f.get('jobTitle')) || undefined,
         role: String(f.get('role')) as Person['role'],
-        status: 'ACTIVE',
-      })
+        status: person?.status ?? 'ACTIVE',
+      };
+    void (person ? repository.updatePerson(person.id, { ...input, version: person.version }) : repository.createPerson(input))
       .then(onDone)
       .catch(onError);
   };
@@ -1036,23 +1038,23 @@ function PersonForm({
     <form className="entity-form" onSubmit={submit}>
       <label>
         Nombre
-        <input name="firstName" required />
+        <input name="firstName" required defaultValue={person?.firstName} />
       </label>
       <label>
         Apellido
-        <input name="lastName" required />
+        <input name="lastName" required defaultValue={person?.lastName} />
       </label>
       <label>
         Cédula
-        <input name="nationalId" required />
+        <input name="nationalId" required defaultValue={person?.nationalId} />
       </label>
       <label>
         Cargo
-        <input name="jobTitle" />
+        <input name="jobTitle" defaultValue={person?.jobTitle} />
       </label>
       <label>
         Rol
-        <select name="role">
+        <select name="role" defaultValue={person?.role}>
           <option value="COLLABORATOR">Colaborador</option>
           <option value="ADMIN">Administrador</option>
         </select>
@@ -1094,9 +1096,7 @@ function TeamsPage() {
       </p>
       <div className="toolbar">
         {actor.role === 'ADMIN' && (
-          <Button onClick={() => setCreating(!creating)}>
-            {creating ? 'Cerrar formulario' : 'Crear equipo'}
-          </Button>
+          <IconButton label="Crear equipo" onClick={() => setCreating(!creating)}><Plus size={18} /></IconButton>
         )}
       </div>
       {creating && (
@@ -1136,9 +1136,7 @@ function TeamsPage() {
                     {team.status === 'ACTIVE' ? 'Activo' : 'Archivado'}
                   </StatusBadge>
                   {actor.role === 'ADMIN' && (
-                    <Button variant="secondary" onClick={() => archive(team)}>
-                      {team.status === 'ACTIVE' ? 'Archivar' : 'Restaurar'}
-                    </Button>
+                    <IconButton label={`${team.status === 'ACTIVE' ? 'Archivar' : 'Restaurar'} ${team.name}`} onClick={() => archive(team)}>{team.status === 'ACTIVE' ? <Archive size={16} /> : <RotateCcw size={16} />}</IconButton>
                   )}
                 </div>
               </li>
@@ -1179,7 +1177,7 @@ function TeamForm({
       .catch(onError);
   };
   return (
-    <form className="entity-form" onSubmit={submit}>
+    <form className="entity-form team-form" onSubmit={submit}>
       <label>
         Nombre
         <input name="name" required />
@@ -1215,7 +1213,9 @@ function TeamForm({
         Descripción
         <textarea name="description" />
       </label>
-      <Button>Guardar equipo</Button>
+      <div className="team-form__actions">
+        <Button type="submit">Guardar equipo</Button>
+      </div>
     </form>
   );
 }
