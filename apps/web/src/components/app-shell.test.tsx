@@ -6,8 +6,9 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/operaciones/mantenimien
 vi.mock('next-intl', () => ({ useTranslations: () => (_key: string) => _key }));
 
 describe('AppShell', () => {
-  it('expone la pestaña del proyecto activa y navegación con nombre accesible', () => {
+  it('expone la pestaña del proyecto activa y navegación con nombre accesible', async () => {
     render(<AppShell><p>Contenido</p></AppShell>);
+    await screen.findByLabelText('1 validaciones pendientes');
     expect(screen.getByRole('navigation', { name: 'Navegación del proyecto' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'board' }).getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('button', { name: 'menu' })).toBeTruthy();

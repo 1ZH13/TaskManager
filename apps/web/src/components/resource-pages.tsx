@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { Download, Eye, FileUp } from 'lucide-react';
-import { Button, ConflictState, StatusBadge } from '../../../../packages/ui/src/index';
+import { Download, Eye, FileUp, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Button, ConflictState, IconButton, StatusBadge } from '../../../../packages/ui/src/index';
 import type {
   BoardColumn,
   Document,
@@ -286,7 +286,7 @@ export function DocumentsPage({ projectId: forcedProjectId }: { projectId?: stri
 }
 
 export function ProvidersPage() {
-  const { phId, repository } = useDemo();
+  const { phId, actor, repository } = useDemo();
   const [data, setData] = useState<{
     providers: ProviderReference[];
     documents: Document[];
@@ -298,6 +298,8 @@ export function ProvidersPage() {
   } | null>(null);
   const [query, setQuery] = useState('');
   const [error, setError] = useState<RepositoryError | null>(null);
+  const [editing, setEditing] = useState<ProviderReference | null>(null);
+  const [creating, setCreating] = useState(false);
   const load = useCallback(() => {
     void Promise.all([
       repository.listProviders({ phId }),
@@ -327,11 +329,21 @@ export function ProvidersPage() {
       .catch(setError);
   }, [phId, repository]);
   useEffect(load, [load]);
+  const saveProvider = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const input = { name: String(form.get('name')), externalId: String(form.get('externalId')), legalName: String(form.get('legalName')) || undefined, taxId: String(form.get('taxId')) || undefined, status: String(form.get('status')) as ProviderReference['status'] };
+    const request = editing
+      ? repository.updateProvider(editing.id, { ...input, version: editing.version })
+      : repository.createProvider({ phId, ...input });
+    void request.then(() => { setCreating(false); setEditing(null); load(); }).catch(setError);
+  };
   return (
     <section className="workspace-page">
       <p className="eyebrow">PH Platform</p>
       <h1>Proveedores</h1>
-      <p>Catálogo de solo lectura: no incluye pagos ni gestión financiera.</p>
+      <p>Gestiona el catálogo operativo; no incluye pagos ni gestión financiera.</p>
+      {actor.role === 'ADMIN' && <div className="toolbar"><IconButton label="Agregar proveedor" onClick={() => { setCreating(true); setEditing(null); }}><Plus size={18} /></IconButton></div>}
       <label>
         Buscar proveedor
         <input
@@ -341,6 +353,14 @@ export function ProvidersPage() {
         />
       </label>
       <ErrorMessage error={error} />
+      {(creating || editing) && <form className="entity-form" onSubmit={saveProvider}>
+        <label>Nombre<input name="name" required defaultValue={editing?.name} /></label>
+        <label>Referencia<input name="externalId" required defaultValue={editing?.externalId} /></label>
+        <label>Razón social<input name="legalName" defaultValue={editing?.legalName} /></label>
+        <label>RUC / identificación fiscal<input name="taxId" defaultValue={editing?.taxId} /></label>
+        <label>Estado<select name="status" defaultValue={editing?.status ?? 'ACTIVE'}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></label>
+        <div className="entity-form__actions"><IconButton label="Guardar proveedor" type="submit"><Plus size={18} /></IconButton><IconButton label="Cancelar" onClick={() => { setCreating(false); setEditing(null); }}><X size={18} /></IconButton></div>
+      </form>}
       {!data ? (
         <div className="tm-skeleton" />
       ) : (
@@ -385,9 +405,7 @@ export function ProvidersPage() {
                       {activity.length}
                     </small>
                   </div>
-                  <StatusBadge tone={provider.syncedAt ? 'success' : 'warning'}>
-                    {provider.syncedAt ? 'Sincronizado' : 'Pendiente'}
-                  </StatusBadge>
+                  <div className="entity-actions"><StatusBadge tone={provider.syncedAt ? 'success' : 'warning'}>{provider.syncedAt ? 'Sincronizado' : 'Pendiente'}</StatusBadge>{actor.role === 'ADMIN' && <><IconButton label={`Editar ${provider.name}`} onClick={() => { setEditing(provider); setCreating(false); }}><Pencil size={16} /></IconButton><IconButton label={`Eliminar ${provider.name}`} onClick={() => { if (window.confirm(`¿Eliminar ${provider.name}?`)) void repository.deleteProvider(phId, provider.id, provider.version).then(load).catch(setError); }}><Trash2 size={16} /></IconButton></>}</div>
                 </li>
               );
             })}

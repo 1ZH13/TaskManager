@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Download } from 'lucide-react';
 import { selectWorkReport, type ReportFilters, type WorkReport } from '@task-manager/domain';
 import type {
   Board,
@@ -45,6 +46,57 @@ const panamaDay = () => {
   }).formatToParts(new Date());
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
   return `${value('year')}-${value('month')}-${value('day')}`;
+};
+const pdfSafe = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/[\\()]/g, '\\$&');
+const downloadPdf = (title: string, report: WorkReport, scope: string) => {
+  const lines = [
+    title,
+    `Generado: ${new Date().toLocaleString('es-PA')}`,
+    `Alcance: ${scope}`,
+    '',
+    `Total de tareas: ${report.total}`,
+    `Pendientes: ${report.pending}`,
+    `Terminadas ultimos 7 dias: ${report.completedLastSevenDays}`,
+    `Proximas a vencer: ${report.dueSoon}`,
+    `Atrasadas: ${report.overdue}`,
+    `Estancadas: ${report.blocked}`,
+    `Cumplimiento: ${report.completionRate === null ? '-' : `${formatNumber.format(report.completionRate)}%`}`,
+    '',
+    'Tareas por estado:',
+    ...report.byStatus.map((item) => `- ${labels[item.key] ?? item.key}: ${item.value}`),
+    '',
+    'Tareas por prioridad:',
+    ...report.byPriority.map((item) => `- ${labels[item.key] ?? item.key}: ${item.value}`),
+  ];
+  const content = lines
+    .map((line, index) => `BT /F1 10 Tf 48 ${790 - index * 17} Td (${pdfSafe(line)}) Tj ET`)
+    .join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${scope === 'Informe general' ? 'informe-general' : 'informe-gestion'}-${panamaDay()}.pdf`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 };
 
 function Distribution({
@@ -204,6 +256,20 @@ export function ReportsPage({ projectId: forcedProjectId }: { projectId?: string
           <h1>Estado del trabajo</h1>
           <p>Los indicadores se ajustan automáticamente al cambiar cualquier filtro.</p>
         </div>
+        {!loading && report.total > 0 && (
+          <Button
+            variant="secondary"
+            onClick={() =>
+              downloadPdf(
+                forcedProjectId ? 'Informe de gestion' : 'Informe general',
+                report,
+                forcedProjectId ? projects[0]?.name ?? 'Informe de gestion' : 'Informe general',
+              )
+            }
+          >
+            <Download size={16} aria-hidden="true" /> Descargar PDF
+          </Button>
+        )}
       </div>
       <form className="report-filters" onSubmit={(event) => event.preventDefault()}>
         {!forcedProjectId ? (
