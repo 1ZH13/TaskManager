@@ -33,7 +33,7 @@ export const projectSchema = entity.extend({
   startsOn: z.iso.date().optional(), endsOn: z.iso.date().optional(), status: z.enum(['ACTIVE', 'ARCHIVED']),
 }).refine((project) => !project.startsOn || !project.endsOn || project.startsOn <= project.endsOn, { message: 'La fecha de inicio debe preceder a la fecha final', path: ['endsOn'] });
 export const boardSchema = entity.extend({ projectId: z.uuid(), name: z.string().min(1), teamIds: z.array(z.uuid()) });
-export const boardColumnSchema = z.object({ id: z.uuid(), phId: z.uuid(), boardId: z.uuid(), name: z.string().min(1), category: statusCategorySchema, color: z.string().regex(/^#[0-9A-Fa-f]{6}$/), position: z.int().nonnegative() });
+export const boardColumnSchema = z.object({ id: z.uuid(), phId: z.uuid(), boardId: z.uuid(), name: z.string().min(1), category: statusCategorySchema, color: z.string().regex(/^#[0-9A-Fa-f]{6}$/), position: z.int().nonnegative(), minItems: z.int().nonnegative().optional(), maxItems: z.int().positive().optional() }).refine((column) => column.minItems === undefined || column.maxItems === undefined || column.minItems <= column.maxItems, { message: 'El límite mínimo no puede superar el máximo.', path: ['minItems'] });
 export const validationPolicySchema = entity.extend({
   projectId: z.uuid(), requiresValidation: z.boolean(), waitingColumnId: z.uuid().optional(), approvedColumnId: z.uuid().optional(), rejectedColumnId: z.uuid().optional(),
 });
