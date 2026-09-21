@@ -14,7 +14,7 @@ export const statusCategorySchema = z.enum(['TODO', 'IN_PROGRESS', 'BLOCKED', 'D
 export const workItemTypeSchema = z.enum(['TASK', 'RECURRING_TASK', 'INCIDENT', 'SUBTASK', 'MILESTONE']);
 export const prioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
 export const roleSchema = z.enum(['ADMIN', 'COLLABORATOR']);
-export const recurrenceFrequencySchema = z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM']);
+export const recurrenceFrequencySchema = z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'CUSTOM']);
 export const recurrenceRuleSchema = z.object({
   frequency: recurrenceFrequencySchema,
   interval: z.int().positive().default(1),

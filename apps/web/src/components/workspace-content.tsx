@@ -26,6 +26,12 @@ const moduleName: Record<Project['module'], string> = {
   OPERATIONS: 'Gestión operativa',
   ACCOUNTING: 'Gestión de contabilidad',
 };
+const priorityLabel: Record<WorkItem['priority'], string> = {
+  LOW: 'Baja',
+  MEDIUM: 'Media',
+  HIGH: 'Alta',
+  URGENT: 'Urgente',
+};
 const templates: Record<Project['module'], { name: string; description: string }> = {
   ADMINISTRATIVE: {
     name: 'Atención administrativa',
@@ -252,7 +258,7 @@ function BoardPage() {
                       {item.key} · {item.title}
                     </strong>
                     <small>
-                      {item.type} · {item.priority}
+                      {item.type} · {priorityLabel[item.priority]}
                     </small>
                     {item.blockedReason && <small>Bloqueada: {item.blockedReason}</small>}
                     <label>
@@ -789,16 +795,15 @@ function HomePage() {
 function ProjectsPage({ module }: { module?: Project['module'] }) {
   const { phId, actor, repository } = useDemo();
   const [projects, setProjects] = useState<Project[] | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState<RepositoryError | null>(null);
   const [creating, setCreating] = useState(false);
   const load = useCallback(() => {
     setError(null);
     void repository
-      .listProjects({ phId, module, includeArchived: showArchived })
+      .listProjects({ phId, module })
       .then(setProjects)
       .catch((e: RepositoryError) => setError(e));
-  }, [repository, phId, module, showArchived]);
+  }, [repository, phId, module]);
   useEffect(load, [load]);
   if (!module)
     return (
@@ -807,11 +812,6 @@ function ProjectsPage({ module }: { module?: Project['module'] }) {
         <p>Esta sección no forma parte del alcance del épico de organización.</p>
       </section>
     );
-  const archive = (project: Project) =>
-    void repository
-      .setProjectArchived(phId, project.id, project.status === 'ACTIVE', project.version)
-      .then(load)
-      .catch(setError);
   return (
     <section className="workspace-page">
       <p className="eyebrow">{moduleName[module]}</p>
@@ -825,14 +825,6 @@ function ProjectsPage({ module }: { module?: Project['module'] }) {
             : ''}
       </p>
       <div className="toolbar">
-        <label>
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
-          />{' '}
-          Mostrar archivados
-        </label>
         {actor.role === 'ADMIN' && (
           <Button onClick={() => setCreating(!creating)}>
             {creating ? 'Cerrar formulario' : 'Crear proyecto'}
@@ -865,35 +857,25 @@ function ProjectsPage({ module }: { module?: Project['module'] }) {
               <p>Crea un proyecto desde la plantilla del módulo.</p>
             </section>
           ) : (
-            <ul className="project-list">
-              {projects.map((project) => (
-                <li key={project.id}>
-                  <div>
-                    <strong>
-                      <i style={{ backgroundColor: project.color }} />
-                      {project.key} · {project.name}
-                    </strong>
-                    <span>{project.description ?? 'Sin descripción'}</span>
-                  </div>
-                  <div>
-                    <Link
-                      className="tm-button tm-button--secondary"
-                      href={`/${module === 'ADMINISTRATIVE' ? 'administrativa' : module === 'ACCOUNTING' ? 'contabilidad' : 'operaciones'}/tablero?projectId=${project.id}`}
-                    >
-                      Abrir tablero
-                    </Link>
-                    <StatusBadge tone={project.status === 'ARCHIVED' ? 'warning' : 'success'}>
-                      {project.status === 'ARCHIVED' ? 'Archivado' : 'Activo'}
-                    </StatusBadge>
-                    {actor.role === 'ADMIN' && (
-                      <Button variant="secondary" onClick={() => archive(project)}>
-                        {project.status === 'ACTIVE' ? 'Archivar' : 'Restaurar'}
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className="project-table-wrap">
+              <table className="project-table">
+                <thead>
+                  <tr><th scope="col">Nombre de proyecto</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr>
+                </thead>
+                <tbody>
+                  {projects.map((project) => (
+                    <tr key={project.id}>
+                      <td>
+                        <strong><i style={{ backgroundColor: project.color }} />{project.key} · {project.name}</strong>
+                        <small>{project.description ?? 'Sin descripción'}</small>
+                      </td>
+                      <td className="project-table__status"><StatusBadge tone={project.status === 'ARCHIVED' ? 'warning' : 'success'}>{project.status === 'ARCHIVED' ? 'Archivado' : 'Activo'}</StatusBadge></td>
+                      <td><div className="project-table__actions"><Link className="tm-button tm-button--secondary" href={`/${module === 'ADMINISTRATIVE' ? 'administrativa' : module === 'ACCOUNTING' ? 'contabilidad' : 'operaciones'}/tablero?projectId=${project.id}`}>Abrir tablero</Link></div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}
@@ -986,21 +968,20 @@ function PeoplePage() {
       {!people ? (
         <div className="tm-skeleton" />
       ) : (
-        <ul className="entity-list">
-          {people.map((person) => (
-            <li key={person.id}>
-              <div>
-                <strong>{person.displayName}</strong>
-                <span>
-                  {person.jobTitle ?? 'Sin cargo'} ·{' '}
-                  {person.role === 'ADMIN' ? 'Administrador' : 'Colaborador'}
-                </span>
-                {visibleId && <small>Cédula: {person.nationalId}</small>}
-              </div>
-              <div className="entity-actions"><StatusBadge tone={person.status === 'ACTIVE' ? 'success' : 'warning'}>{person.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</StatusBadge>{actor.role === 'ADMIN' && <><IconButton label={`Editar ${person.displayName}`} onClick={() => { setEditing(person); setCreating(false); }}><Pencil size={16} /></IconButton><IconButton label={`${person.status === 'ACTIVE' ? 'Desactivar' : 'Activar'} ${person.displayName}`} onClick={() => void repository.updatePerson(person.id, { version: person.version, status: person.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }).then(load).catch(setError)}><UserMinus size={16} /></IconButton></>}</div>
-            </li>
-          ))}
-        </ul>
+        <div className="resource-table-wrap">
+          <table className="resource-table">
+            <thead><tr><th scope="col">Nombre</th><th scope="col">Cargo y rol</th>{visibleId && <th scope="col">Cédula</th>}<th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+            <tbody>{people.map((person) => (
+              <tr key={person.id}>
+                <td><strong>{person.displayName}</strong></td>
+                <td>{person.jobTitle ?? 'Sin cargo'} · {person.role === 'ADMIN' ? 'Administrador' : 'Colaborador'}</td>
+                {visibleId && <td>{person.nationalId}</td>}
+                <td className="resource-table__status"><StatusBadge tone={person.status === 'ACTIVE' ? 'success' : 'warning'}>{person.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</StatusBadge></td>
+                <td><div className="resource-table__actions">{actor.role === 'ADMIN' && <><IconButton label={`Editar ${person.displayName}`} onClick={() => { setEditing(person); setCreating(false); }}><Pencil size={16} /></IconButton><IconButton label={`${person.status === 'ACTIVE' ? 'Desactivar' : 'Activar'} ${person.displayName}`} onClick={() => void repository.updatePerson(person.id, { version: person.version, status: person.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }).then(load).catch(setError)}><UserMinus size={16} /></IconButton></>}</div></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -1113,36 +1094,23 @@ function TeamsPage() {
       {!teams ? (
         <div className="tm-skeleton" />
       ) : (
-        <ul className="entity-list">
-          {teams.map((team) => {
+        <div className="resource-table-wrap">
+          <table className="resource-table">
+            <thead><tr><th scope="col">Nombre de equipo</th><th scope="col">Líder</th><th scope="col">Miembros</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr></thead>
+            <tbody>{teams.map((team) => {
             const lead = people.find((person) => person.id === team.leadId);
             return (
-              <li key={team.id}>
-                <div>
-                  <strong>{team.name}</strong>
-                  <span>
-                    Líder: {lead?.displayName ?? 'Sin asignar'} · {team.memberIds.length} miembros ·
-                    0 pendientes
-                  </span>
-                  <small>
-                    {team.memberIds
-                      .map((id) => people.find((p) => p.id === id)?.displayName)
-                      .filter(Boolean)
-                      .join(', ') || 'Sin miembros'}
-                  </small>
-                </div>
-                <div>
-                  <StatusBadge tone={team.status === 'ACTIVE' ? 'success' : 'warning'}>
-                    {team.status === 'ACTIVE' ? 'Activo' : 'Archivado'}
-                  </StatusBadge>
-                  {actor.role === 'ADMIN' && (
-                    <IconButton label={`${team.status === 'ACTIVE' ? 'Archivar' : 'Restaurar'} ${team.name}`} onClick={() => archive(team)}>{team.status === 'ACTIVE' ? <Archive size={16} /> : <RotateCcw size={16} />}</IconButton>
-                  )}
-                </div>
-              </li>
+              <tr key={team.id}>
+                <td><strong>{team.name}</strong></td>
+                <td>{lead?.displayName ?? 'Sin asignar'}</td>
+                <td>{team.memberIds.map((id) => people.find((p) => p.id === id)?.displayName).filter(Boolean).join(', ') || 'Sin miembros'} <small>({team.memberIds.length})</small></td>
+                <td className="resource-table__status"><StatusBadge tone={team.status === 'ACTIVE' ? 'success' : 'warning'}>{team.status === 'ACTIVE' ? 'Activo' : 'Archivado'}</StatusBadge></td>
+                <td><div className="resource-table__actions">{actor.role === 'ADMIN' && <IconButton label={`${team.status === 'ACTIVE' ? 'Archivar' : 'Restaurar'} ${team.name}`} onClick={() => archive(team)}>{team.status === 'ACTIVE' ? <Archive size={16} /> : <RotateCcw size={16} />}</IconButton>}</div></td>
+              </tr>
             );
-          })}
-        </ul>
+            })}</tbody>
+          </table>
+        </div>
       )}
     </section>
   );
