@@ -24,6 +24,7 @@ import { IconButton } from '../../../../packages/ui/src/index';
 import { demoIds } from '@task-manager/data';
 import { demoSeed, useDemo } from './demo-context';
 import { AccessibleDialog } from './accessible-dialog';
+import { projectViewHref } from './project-view-query';
 const navigation = [
   ['home', '/', LayoutDashboard],
   ['administrative', '/administrativa', BriefcaseBusiness],
@@ -36,7 +37,6 @@ const navigation = [
   ['settings', '/configuracion', Settings],
 ] as const;
 const projectTabs = [
-  ['overview', 'resumen'],
   ['list', 'lista'],
   ['board', 'tablero'],
   ['calendar', 'calendario'],
@@ -137,17 +137,8 @@ function AppShellContent({ children }: { children: ReactNode }) {
               onChange={(event) => {
                 setPhId(event.target.value);
                 setOpen(false);
-                // Project IDs belong to a PH: choose from the new PH's projects.
-                const params = new URLSearchParams(searchParams.toString());
-                params.delete('projectId');
-                params.delete('phId');
-                params.delete('boardId');
-                params.delete('board');
-                params.delete('taskId');
-                params.delete('assignee');
-                params.delete('team');
-                const query = params.toString();
-                router.replace(`${projectBase ?? pathname}${query ? `?${query}` : ''}`);
+                // Context IDs and task filters must be chosen again for the new PH.
+                router.replace(projectBase ?? pathname);
               }}
             >
               {demoSeed.contexts.map((context) => (
@@ -219,7 +210,10 @@ function AppShellContent({ children }: { children: ReactNode }) {
               <select
                 aria-label="Seleccionar usuario de demostración"
                 value={actor.id}
-                onChange={(event) => setActorId(event.target.value)}
+                onChange={(event) => {
+                  setActorId(event.target.value);
+                  router.replace(projectBase ?? pathname);
+                }}
               >
                 {actors.map((person) => (
                   <option key={person.id} value={person.id}>
@@ -271,11 +265,12 @@ function AppShellContent({ children }: { children: ReactNode }) {
         {projectBase && (
           <>
             <section className="project-header">
+              <Link href={projectBase}>Volver a proyectos</Link>
               <p className="project-name">{projectName}</p>
             </section>
             <nav className="project-tabs" aria-label="Navegación del proyecto">
               {projectTabs.map(([key, slug]) => {
-                const href = `${projectBase}/${slug}${projectId ? `?projectId=${projectId}` : ''}`;
+                const href = projectViewHref(projectBase, slug, searchParams);
                 const isValidations = key === 'validations';
                 return (
                   <Link

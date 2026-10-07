@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   completionPercent,
   expandOccurrences,
@@ -15,6 +16,8 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { useDemo } from './demo-context';
 import { FilterSelect } from './filter-select';
 import { AccessibleDialog } from './accessible-dialog';
+import { projectViewHref } from './project-view-query';
+import { listAllWorkItems } from './task-link';
 
 type View = 'list' | 'calendar' | 'timeline';
 const today = '2026-09-19';
@@ -80,14 +83,25 @@ function ScopedViews({
   demo: ReturnType<typeof useDemo>;
 }) {
   const { phId, actor, repository } = demo;
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const [items, setItems] = useState<WorkItem[]>([]);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
-  const [query, setQuery] = useState('');
-  const [assigneeId, setAssigneeId] = useState('');
-  const [startsFrom, setStartsFrom] = useState('');
-  const [startsTo, setStartsTo] = useState('');
+  const query = params.get('q') ?? '';
+  const assigneeId = params.get('assignee') ?? '';
+  const startsFrom = view === 'list' ? (params.get('startsFrom') ?? '') : '';
+  const startsTo = view === 'list' ? (params.get('startsTo') ?? '') : '';
+  const updateFilter = (name: string, value: string) => {
+    const next = new URLSearchParams(params.toString());
+    if (value) next.set(name, value);
+    else next.delete(name);
+    const slug = view === 'list' ? 'lista' : view === 'calendar' ? 'calendario' : 'cronograma';
+    const base = pathname.slice(0, pathname.lastIndexOf('/'));
+    router.replace(projectViewHref(base, slug, next), { scroll: false });
+  };
   const [calendarMode, setCalendarMode] = useState<'month' | 'week' | 'agenda'>('week');
   const [zoom, setZoom] = useState<'week' | 'month' | 'quarter'>('month');
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +115,7 @@ function ScopedViews({
     const request = ++requestId.current;
     try {
       const [page, nextBoards, nextPeople] = await Promise.all([
-        repository.listWorkItems({ phId, projectId }),
+        listAllWorkItems(repository, { phId, projectId }),
         repository.listBoards({ phId, projectId }),
         repository.listPeople({ phId }),
       ]);
@@ -176,8 +190,8 @@ function ScopedViews({
     () =>
       selectWorkItems(items, columns, { query, assigneeId: assigneeId || undefined }).filter(
         (item) =>
-          (!startsFrom || (item.startsOn ?? item.dueOn ?? '') >= startsFrom) &&
-          (!startsTo || (item.startsOn ?? item.dueOn ?? '') <= startsTo),
+          (!startsFrom || (!!item.startsOn && item.startsOn >= startsFrom)) &&
+          (!startsTo || (!!item.startsOn && item.startsOn <= startsTo)),
       ),
     [items, columns, query, assigneeId, startsFrom, startsTo],
   );
@@ -307,21 +321,58 @@ function ScopedViews({
       {view === 'list' && actor.role === 'ADMIN' && (
         <RecurrenceComposer people={people} onCreate={createRecurring} />
       )}
+      <div className="view-controls" role="group" aria-label="Filtros de tareas">
+        <label className="view-filter">
+          Buscar o filtrar
+          <input
+            value={query}
+            onChange={(event) => updateFilter('q', event.target.value)}
+            placeholder="Clave, título o descripción"
+          />
+        </label>
+        <FilterSelect
+          label="Responsable"
+          value={assigneeId}
+          options={[
+            { label: 'Todos', value: '' },
+            ...(assigneeId && !people.some((person) => person.id === assigneeId)
+              ? [{ label: 'Responsable no disponible', value: assigneeId }]
+              : []),
+            ...people.map((person) => ({ label: person.displayName, value: person.id })),
+          ]}
+          onChange={(value) => updateFilter('assignee', value)}
+        />
+        {view === 'list' && (
+          <>
+            <label className="view-filter view-filter--date">
+              Inicio desde
+              <input
+                aria-label="Filtrar tareas por inicio desde"
+                type="date"
+                value={startsFrom}
+                max={startsTo || undefined}
+                onChange={(event) => updateFilter('startsFrom', event.target.value)}
+              />
+            </label>
+            <label className="view-filter view-filter--date">
+              Inicio hasta
+              <input
+                aria-label="Filtrar tareas por inicio hasta"
+                type="date"
+                value={startsTo}
+                min={startsFrom || undefined}
+                onChange={(event) => updateFilter('startsTo', event.target.value)}
+              />
+            </label>
+          </>
+        )}
+      </div>
       {view === 'list' ? (
         <ListView
           items={filtered}
           columns={columns}
-          people={people}
           update={update}
           move={move}
-          query={query}
-          setQuery={setQuery}
-          assigneeId={assigneeId}
-          setAssigneeId={setAssigneeId}
-          startsFrom={startsFrom}
-          setStartsFrom={setStartsFrom}
-          startsTo={startsTo}
-          setStartsTo={setStartsTo}
           canEdit={actor.role === 'ADMIN'}
           pending={pending}
           error={error}
@@ -432,17 +483,8 @@ function State({ item, columns }: { item: WorkItem; columns: BoardColumn[] }) {
 function ListView({
   items,
   columns,
-  people,
   update,
   move,
-  query,
-  setQuery,
-  assigneeId,
-  setAssigneeId,
-  startsFrom,
-  setStartsFrom,
-  startsTo,
-  setStartsTo,
   canEdit,
   pending,
   error,
@@ -450,17 +492,8 @@ function ListView({
 }: {
   items: WorkItem[];
   columns: BoardColumn[];
-  people: Person[];
   update: (item: WorkItem, change: Partial<WorkItem>) => Promise<boolean>;
   move: (item: WorkItem, columnId: string) => void;
-  query: string;
-  setQuery: (value: string) => void;
-  assigneeId: string;
-  setAssigneeId: (id: string) => void;
-  startsFrom: string;
-  setStartsFrom: (date: string) => void;
-  startsTo: string;
-  setStartsTo: (date: string) => void;
   canEdit: boolean;
   pending: boolean;
   error: string | null;
@@ -469,45 +502,6 @@ function ListView({
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
   return (
     <>
-      <div className="view-controls">
-        <label className="view-filter">
-          Buscar o filtrar
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Clave, título o descripción"
-          />
-        </label>
-        <FilterSelect
-          label="Responsable"
-          value={assigneeId}
-          options={[
-            { label: 'Todos', value: '' },
-            ...people.map((person) => ({ label: person.displayName, value: person.id })),
-          ]}
-          onChange={setAssigneeId}
-        />
-        <label className="view-filter view-filter--date">
-          Desde
-          <input
-            aria-label="Filtrar tareas desde"
-            type="date"
-            value={startsFrom}
-            max={startsTo || undefined}
-            onChange={(event) => setStartsFrom(event.target.value)}
-          />
-        </label>
-        <label className="view-filter view-filter--date">
-          Hasta
-          <input
-            aria-label="Filtrar tareas hasta"
-            type="date"
-            value={startsTo}
-            min={startsFrom || undefined}
-            onChange={(event) => setStartsTo(event.target.value)}
-          />
-        </label>
-      </div>
       <p role="status">
         {items.length ? `${items.length} tareas` : 'No hay tareas que coincidan con los filtros.'}
       </p>

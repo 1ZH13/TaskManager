@@ -13,6 +13,31 @@ import { useDemo } from './demo-context';
 import { SynchronizedViews } from './synchronized-views';
 
 vi.mock('./demo-context', () => ({ useDemo: vi.fn() }));
+const nav = vi.hoisted(() => ({
+  query: '',
+  pathname: '/operaciones/lista',
+  replace: vi.fn(),
+  listeners: new Set<() => void>(),
+}));
+vi.mock('next/navigation', async () => {
+  const { useSyncExternalStore } = await import('react');
+  return {
+    useSearchParams: () =>
+      new URLSearchParams(
+        useSyncExternalStore(
+          (listener) => {
+            nav.listeners.add(listener);
+            return () => {
+              nav.listeners.delete(listener);
+            };
+          },
+          () => nav.query,
+        ),
+      ),
+    usePathname: () => nav.pathname,
+    useRouter: () => ({ replace: nav.replace }),
+  };
+});
 
 let context: ReturnType<typeof useDemo>;
 const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
@@ -28,6 +53,14 @@ const deferred = <T,>() => {
 };
 
 beforeEach(() => {
+  nav.query = '';
+  nav.pathname = '/operaciones/lista';
+  nav.replace.mockImplementation((url: string) => {
+    const next = new URL(url, 'http://local');
+    nav.pathname = next.pathname;
+    nav.query = next.searchParams.toString();
+    nav.listeners.forEach((listener) => listener());
+  });
   localStorage.clear();
   const actor = {
     id: demoIds.admin,
@@ -73,6 +106,95 @@ afterEach(() => {
 });
 
 describe('SynchronizedViews', () => {
+  it('encuentra con los filtros compartidos una tarea de una página posterior', async () => {
+    nav.query = `q=posterior&assignee=${demoIds.collab}`;
+    const later = { ...task, id: 'later-page', title: 'Tarea posterior' };
+    const list = vi
+      .spyOn(context.repository, 'listWorkItems')
+      .mockResolvedValueOnce({ items: [task], nextCursor: 'page-two' })
+      .mockResolvedValueOnce({ items: [later] });
+    render(<SynchronizedViews view="list" />);
+    expect(await screen.findByText('Tarea posterior')).toBeTruthy();
+    expect(screen.queryByText(task.title)).toBeNull();
+    expect(list).toHaveBeenNthCalledWith(2, {
+      phId: context.phId,
+      projectId: demoIds.opsProject,
+      cursor: 'page-two',
+    });
+  });
+  it.each(['list', 'calendar', 'timeline'] as const)(
+    'lee q y responsable de la URL y expone controles en %s',
+    async (view: 'list' | 'calendar' | 'timeline') => {
+      nav.query = `q=Revisar&assignee=${demoIds.collab}&board=tablero-de-retorno&priority=LOW&dueFrom=2099-01-01`;
+      render(<SynchronizedViews view={view} />);
+      const search = (await screen.findByLabelText('Buscar o filtrar')) as HTMLInputElement;
+      expect(search.value).toBe('Revisar');
+      expect(
+        (
+          within(screen.getByRole('group', { name: 'Filtros de tareas' })).getByRole('combobox', {
+            name: 'Responsable',
+          }) as HTMLSelectElement
+        ).value,
+      ).toBe(demoIds.collab);
+      expect(screen.getByText(task.title, { exact: false })).toBeTruthy();
+      expect(screen.queryByText('Mantenimiento de septiembre', { exact: false })).toBeNull();
+    },
+  );
+
+  it('escribe filtros en URL sin perder selección de retorno y responde a navegación Atrás', async () => {
+    const user = userEvent.setup();
+    nav.query = `projectId=${demoIds.opsProject}&phId=${demoIds.vista}&board=segundo`;
+    render(<SynchronizedViews view="list" />);
+    const search = (await screen.findByLabelText('Buscar o filtrar')) as HTMLInputElement;
+    await user.type(search, 'bomba');
+    await user.selectOptions(
+      within(screen.getByRole('group', { name: 'Filtros de tareas' })).getByRole('combobox', {
+        name: 'Responsable',
+      }),
+      demoIds.collab,
+    );
+    const query = new URLSearchParams(nav.query);
+    expect(query.get('q')).toBe('bomba');
+    expect(query.get('assignee')).toBe(demoIds.collab);
+    expect(query.get('board')).toBe('segundo');
+    expect(query.get('projectId')).toBe(demoIds.opsProject);
+    expect(query.get('phId')).toBe(demoIds.vista);
+    act(() => {
+      nav.query = '';
+      nav.listeners.forEach((listener) => listener());
+    });
+    expect(search.value).toBe('');
+    expect(
+      (
+        within(screen.getByRole('group', { name: 'Filtros de tareas' })).getByRole('combobox', {
+          name: 'Responsable',
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe('');
+    expect(screen.getByText('Mantenimiento de septiembre')).toBeTruthy();
+  });
+
+  it('distingue inicio de vencimiento y no aplica fechas de Lista a Calendario', async () => {
+    const noStart = {
+      ...task,
+      id: 'without-start',
+      title: 'Solo vencimiento',
+      startsOn: undefined,
+      dueOn: '2026-09-19',
+    };
+    vi.spyOn(context.repository, 'listWorkItems').mockResolvedValue({ items: [task, noStart] });
+    nav.query = 'startsFrom=2026-09-18&startsTo=2026-09-18&dueFrom=2099-01-01';
+    const { rerender } = render(<SynchronizedViews view="list" />);
+    await screen.findByText(task.title);
+    expect(screen.queryByText('Solo vencimiento')).toBeNull();
+    expect(
+      (screen.getByLabelText('Filtrar tareas por inicio desde') as HTMLInputElement).value,
+    ).toBe('2026-09-18');
+    rerender(<SynchronizedViews view="calendar" />);
+    expect(screen.getByText('OPS-1 · Solo vencimiento')).toBeTruthy();
+    expect(screen.queryByLabelText('Filtrar tareas por inicio desde')).toBeNull();
+  });
+
   it('explica por qué no se puede completar una tarea y mantiene la lista', async () => {
     vi.spyOn(context.repository, 'moveWorkItem').mockRejectedValueOnce(
       new DataError('VALIDATION', 'Solo una tarea aprobada puede completarse.'),
@@ -198,7 +320,7 @@ describe('SynchronizedViews', () => {
 
   it.each(['project', 'ph', 'actor'] as const)(
     'descarta resultados de un contexto %s anterior',
-    async (change) => {
+    async (change: 'project' | 'ph' | 'actor') => {
       const old = deferred<Page<WorkItem>>();
       vi.spyOn(context.repository, 'listBoards').mockResolvedValue([]);
       vi.spyOn(context.repository, 'listPeople').mockResolvedValue([]);

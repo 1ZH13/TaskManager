@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   Bookmark,
   CalendarDays,
@@ -37,6 +38,8 @@ import type {
 } from '@task-manager/shared';
 import { useDemo } from './demo-context';
 import { AccessibleDialog } from './accessible-dialog';
+import { listAllWorkItems, resolveTaskLink } from './task-link';
+import { taskDraftKey, taskDrafts, type TaskDraft } from './task-drafts';
 
 const priorityLabel: Record<WorkItem['priority'], string> = {
   LOW: 'Baja',
@@ -460,11 +463,68 @@ function BoardControls({
 export function OperationalBoard() {
   const { phId, actor } = useDemo();
   const params = useSearchParams();
+  const taskId = params.get('taskId');
+  if (params.get('phId') && params.get('phId') !== phId) {
+    return (
+      <section className="workspace-page">
+        <h1>Enlace de otra propiedad</h1>
+        <p role="alert">Selecciona la propiedad correspondiente y vuelve a abrir el enlace.</p>
+        <Link href="/notificaciones">Volver a notificaciones</Link>
+      </section>
+    );
+  }
+  if (taskId && (!params.get('projectId') || !params.get('board'))) {
+    return <TaskLinkResolver key={`${phId}:${actor.id}:${actor.role}:${taskId}`} taskId={taskId} />;
+  }
   // A new scope must never render the previous property's tasks or drafts.
   const scope = [phId, actor.id, actor.role, params.get('projectId'), params.get('board')].join(
     ':',
   );
   return <OperationalBoardContent key={scope} />;
+}
+
+function TaskLinkResolver({ taskId }: { taskId: string }) {
+  const { phId, repository } = useDemo();
+  const router = useRouter();
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void resolveTaskLink(repository, phId, taskId)
+      .then((href) => {
+        if (active) router.replace(href, { scroll: false });
+      })
+      .catch(() => {
+        if (active) setError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [phId, repository, router, taskId, attempt]);
+  return (
+    <section className="workspace-page">
+      <h1>Abrir tarea</h1>
+      {error ? (
+        <>
+          <p role="alert">
+            No se pudo abrir la tarea. Puede que ya no exista, no tengas acceso o haya fallado la
+            conexión.
+          </p>
+          <Button
+            onClick={() => {
+              setError(false);
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Reintentar
+          </Button>
+          <Link href="/notificaciones">Volver a notificaciones</Link>
+        </>
+      ) : (
+        <p role="status">Buscando la tarea…</p>
+      )}
+    </section>
+  );
 }
 
 function OperationalBoardContent() {
@@ -474,6 +534,7 @@ function OperationalBoardContent() {
   const params = useSearchParams();
   const boardId = params.get('board');
   const projectId = params.get('projectId') ?? demoIds.opsProject;
+  const taskId = params.get('taskId');
   const [boards, setBoards] = useState<Board[]>([]);
   const [board, setBoard] = useState<Board | null>(null);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
@@ -489,6 +550,7 @@ function OperationalBoardContent() {
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const loadRequest = useRef(0);
+  const previousTaskId = useRef(taskId);
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
   const load = useCallback(() => {
     const request = ++loadRequest.current;
@@ -496,9 +558,15 @@ function OperationalBoardContent() {
       .listBoards({ phId, projectId })
       .then(async (nextBoards) => {
         if (request !== loadRequest.current) return;
-        const nextBoard = nextBoards.find((entry) => entry.id === boardId) ?? nextBoards[0];
+        const nextBoard = boardId
+          ? nextBoards.find((entry) => entry.id === boardId)
+          : nextBoards[0];
         if (!nextBoard) {
-          setError(null);
+          setError(
+            taskId || boardId
+              ? 'El tablero o la tarea no están disponibles en este proyecto.'
+              : null,
+          );
           setBoards(nextBoards);
           setBoard(null);
           setColumns([]);
@@ -514,14 +582,19 @@ function OperationalBoardContent() {
         const [nextColumns, page, nextPolicy, nextPeople, nextTeams, nextProviders] =
           await Promise.all([
             repository.listBoardColumns({ phId, boardId: nextBoard.id }),
-            repository.listWorkItems({ phId, boardId: nextBoard.id }),
+            listAllWorkItems(repository, { phId, boardId: nextBoard.id }),
             repository.getValidationPolicy(phId, nextBoard.projectId),
             repository.listPeople({ phId }),
             repository.listTeams({ phId }),
             repository.listProviders({ phId }),
           ]);
         if (request !== loadRequest.current) return;
-        setError(null);
+        const linkedTask = taskId ? page.items.find((item) => item.id === taskId) : undefined;
+        setError(
+          taskId && !linkedTask
+            ? 'La tarea no está disponible en este tablero o no tienes acceso.'
+            : null,
+        );
         setBoards(nextBoards);
         setBoard(nextBoard);
         setColumns(nextColumns);
@@ -530,8 +603,16 @@ function OperationalBoardContent() {
         setPeople(nextPeople);
         setTeams(nextTeams);
         setProviders(nextProviders);
+        const changedTask = previousTaskId.current !== taskId;
+        previousTaskId.current = taskId;
         setSelected((current) =>
-          current ? (page.items.find((item) => item.id === current.id) ?? null) : null,
+          taskId
+            ? (linkedTask ?? null)
+            : changedTask
+              ? null
+              : current
+                ? (page.items.find((item) => item.id === current.id) ?? null)
+                : null,
         );
       })
       .catch((failure: RepositoryError) => {
@@ -540,18 +621,59 @@ function OperationalBoardContent() {
       .finally(() => {
         if (request === loadRequest.current) setLoading(false);
       });
-  }, [boardId, phId, projectId, repository]);
+  }, [boardId, phId, projectId, repository, taskId]);
   useEffect(() => {
     load();
     return () => {
       loadRequest.current += 1;
     };
   }, [load]);
+  useEffect(() => {
+    if (!dirty) return;
+    const leave = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const followLink = (event: MouseEvent) => {
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (
+        !(link instanceof HTMLAnchorElement) ||
+        link.target === '_blank' ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.altKey ||
+        event.button !== 0
+      )
+        return;
+      if (!window.confirm('Tienes cambios sin guardar. ¿Descartarlos y continuar?')) {
+        event.preventDefault();
+        event.stopPropagation();
+      } else if (selected) {
+        taskDrafts.delete(taskDraftKey(phId, actor.id, actor.role, selected.id));
+      }
+    };
+    window.addEventListener('beforeunload', leave);
+    document.addEventListener('click', followLink, true);
+    return () => {
+      window.removeEventListener('beforeunload', leave);
+      document.removeEventListener('click', followLink, true);
+    };
+  }, [dirty, selected, phId, actor.id, actor.role]);
   const openTask = (item: WorkItem | null) => {
     if (item?.id === selected?.id) return;
     if (dirty && !window.confirm('Tienes cambios sin guardar. ¿Descartarlos y continuar?')) return;
+    if (selected) taskDrafts.delete(taskDraftKey(phId, actor.id, actor.role, selected.id));
     setDirty(false);
     setSelected(item);
+    const next = new URLSearchParams(params);
+    next.set('phId', phId);
+    next.set('projectId', projectId);
+    if (board) next.set('board', board.id);
+    if (item) next.set('taskId', item.id);
+    else next.delete('taskId');
+    if (item) router.push(`${pathname}?${next}`, { scroll: false });
+    else router.replace(`${pathname}?${next}`, { scroll: false });
   };
   const q = params.get('q')?.toLowerCase() ?? '';
   const priority = params.get('priority') ?? '';
@@ -566,7 +688,7 @@ function OperationalBoardContent() {
     () =>
       items.filter(
         (item) =>
-          (!q || `${item.key} ${item.title}`.toLowerCase().includes(q)) &&
+          (!q || `${item.key} ${item.title} ${item.description ?? ''}`.toLowerCase().includes(q)) &&
           (!priority || item.priority === priority) &&
           (!assignee || item.assigneeId === assignee) &&
           (!team || item.teamId === team) &&
@@ -744,16 +866,25 @@ function OperationalBoardContent() {
       .catch((failure: RepositoryError) => setError(failure.message));
   };
   const selectBoard = (id: string) => {
+    if (dirty && !window.confirm('Tienes cambios sin guardar. ¿Descartarlos y continuar?')) return;
+    if (selected) taskDrafts.delete(taskDraftKey(phId, actor.id, actor.role, selected.id));
     const next = new URLSearchParams(params);
     next.set('board', id);
+    next.delete('taskId');
     router.replace(`${pathname}?${next}`);
   };
   return (
     <section className="workspace-page board-page">
       <div className="toolbar">
         <div>
-          <p className="eyebrow">Gestión operativa</p>
-          <h1>{board?.name ?? 'Tablero'}</h1>
+          <p className="eyebrow">
+            {pathname.startsWith('/administrativa')
+              ? 'Gestión administrativa'
+              : pathname.startsWith('/contabilidad')
+                ? 'Gestión de contabilidad'
+                : 'Gestión operativa'}
+          </p>
+          <h1 tabIndex={-1}>{board?.name ?? 'Tablero'}</h1>
         </div>
       </div>
       <p className="sr-only" role="status" aria-live="polite">
@@ -1121,19 +1252,49 @@ function TaskEditor({
 }) {
   const { phId, actor, repository } = useDemo();
   const [subtask, setSubtask] = useState(false);
+  const detailHeading = useRef<HTMLHeadingElement>(null);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    const trigger = document.activeElement;
+    const boardHeading = detailHeading.current?.closest('.board-page')?.querySelector('h1');
+    detailHeading.current?.focus();
+    return () => {
+      active.current = false;
+      const target =
+        trigger instanceof HTMLElement && trigger !== document.body && trigger.isConnected
+          ? trigger
+          : boardHeading;
+      if (target instanceof HTMLElement && target.isConnected)
+        target.focus({ preventScroll: true });
+    };
+  }, []);
   const [subtasks, setSubtasks] = useState<WorkItem[]>([]);
   const [comments, setComments] = useState<WorkComment[]>([]);
   const [attachments, setAttachments] = useState<WorkAttachment[]>([]);
   const [activity, setActivity] = useState<WorkActivity[]>([]);
-  const [draft, setDraft] = useState(() => ({
-    title: item.title,
-    description: item.description ?? '',
-    priority: item.priority,
-    blockedReason: item.blockedReason ?? '',
-  }));
-  const [savedDraft, setSavedDraft] = useState(draft);
+  const draftKey = taskDraftKey(phId, actor.id, actor.role, item.id);
+  const [initialDraft] = useState(() => taskDrafts.get(draftKey));
+  const [savedDraft, setSavedDraft] = useState<TaskDraft>(
+    () =>
+      initialDraft?.base ?? {
+        title: item.title,
+        description: item.description ?? '',
+        priority: item.priority,
+        blockedReason: item.blockedReason ?? '',
+      },
+  );
+  const [draft, setDraft] = useState<TaskDraft>(() => initialDraft?.draft ?? savedDraft);
+  const [version, setVersion] = useState(initialDraft?.version ?? item.version);
+  const changeDraft = (next: TaskDraft) => {
+    setDraft(next);
+    if (JSON.stringify(next) === JSON.stringify(savedDraft)) taskDrafts.delete(draftKey);
+    else taskDrafts.set(draftKey, { draft: next, base: savedDraft, version });
+  };
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(
+    initialDraft ? 'Borrador recuperado de esta sesión. Revisa los cambios antes de guardar.' : '',
+  );
   const isDirty = Object.keys(draft).some(
     (key) => draft[key as keyof typeof draft] !== savedDraft[key as keyof typeof draft],
   );
@@ -1148,33 +1309,45 @@ function TaskEditor({
       repository.listActivity(phId, item.id),
     ])
       .then(([nextSubtasks, nextComments, nextAttachments, nextActivity]) => {
+        if (!active.current) return;
         setSubtasks(nextSubtasks.items);
         setComments(nextComments);
         setAttachments(nextAttachments);
         setActivity(nextActivity);
       })
-      .catch((failure: RepositoryError) => onError(failure.message));
+      .catch((failure: RepositoryError) => {
+        if (active.current) onError(failure.message);
+      });
   }, [item.boardId, item.id, onError, phId, repository]);
   useEffect(loadDetail, [loadDetail]);
   const save = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
+    const submittedDraft = taskDrafts.get(draftKey);
     setSaving(true);
     setNotice('');
     void repository
       .updateWorkItem(item.id, {
-        version: item.version,
+        version,
         title: draft.title,
         description: draft.description || undefined,
         priority: draft.priority,
         blockedReason: draft.blockedReason || undefined,
       })
-      .then(() => {
+      .then((updated) => {
+        if (taskDrafts.get(draftKey) === submittedDraft) taskDrafts.delete(draftKey);
+        if (!active.current) return;
+        setVersion(updated.version);
         setSavedDraft(draft);
         setNotice('Cambios guardados.');
         onChanged();
       })
-      .catch((failure: RepositoryError) => onError(failure.message))
-      .finally(() => setSaving(false));
+      .catch((failure: RepositoryError) => {
+        if (active.current) onError(failure.message);
+      })
+      .finally(() => {
+        if (active.current) setSaving(false);
+      });
   };
   const createSubtask = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1199,11 +1372,14 @@ function TaskEditor({
         labels: [],
       })
       .then(() => {
+        if (!active.current) return;
         setSubtask(false);
         loadDetail();
         onChanged();
       })
-      .catch((failure: RepositoryError) => onError(failure.message));
+      .catch((failure: RepositoryError) => {
+        if (active.current) onError(failure.message);
+      });
   };
   const comment = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1212,10 +1388,13 @@ function TaskEditor({
     void repository
       .addComment({ phId, workItemId: item.id, body })
       .then(() => {
+        if (!active.current) return;
         form.reset();
         loadDetail();
       })
-      .catch((failure: RepositoryError) => onError(failure.message));
+      .catch((failure: RepositoryError) => {
+        if (active.current) onError(failure.message);
+      });
   };
   const attach = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1231,10 +1410,13 @@ function TaskEditor({
         url: `https://demo.local/adjuntos/${encodeURIComponent(name)}`,
       })
       .then(() => {
+        if (!active.current) return;
         form.reset();
         loadDetail();
       })
-      .catch((failure: RepositoryError) => onError(failure.message));
+      .catch((failure: RepositoryError) => {
+        if (active.current) onError(failure.message);
+      });
   };
   const remove = () => {
     if (
@@ -1246,15 +1428,21 @@ function TaskEditor({
     void repository
       .deleteWorkItem(phId, item.id, item.version)
       .then(() => {
+        taskDrafts.delete(draftKey);
+        if (!active.current) return;
         onClose();
         onChanged();
       })
-      .catch((failure: RepositoryError) => onError(failure.message));
+      .catch((failure: RepositoryError) => {
+        if (active.current) onError(failure.message);
+      });
   };
   return (
     <section className="task-detail" aria-label={`Detalle de ${item.title}`}>
       <div className="toolbar">
-        <h2>{item.key}</h2>
+        <h2 ref={detailHeading} tabIndex={-1}>
+          {item.key}
+        </h2>
         <Button variant="secondary" onClick={onClose}>
           Cerrar
         </Button>
@@ -1265,7 +1453,8 @@ function TaskEditor({
           <input
             name="title"
             value={draft.title}
-            onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+            onChange={(event) => changeDraft({ ...draft, title: event.target.value })}
+            disabled={saving}
             required
           />
         </label>
@@ -1275,8 +1464,9 @@ function TaskEditor({
             name="priority"
             value={draft.priority}
             onChange={(event) =>
-              setDraft({ ...draft, priority: event.target.value as WorkItem['priority'] })
+              changeDraft({ ...draft, priority: event.target.value as WorkItem['priority'] })
             }
+            disabled={saving}
           >
             {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map((entry) => (
               <option key={entry} value={entry}>
@@ -1290,7 +1480,8 @@ function TaskEditor({
           <input
             name="blockedReason"
             value={draft.blockedReason}
-            onChange={(event) => setDraft({ ...draft, blockedReason: event.target.value })}
+            onChange={(event) => changeDraft({ ...draft, blockedReason: event.target.value })}
+            disabled={saving}
           />
         </label>
         <label>
@@ -1298,7 +1489,8 @@ function TaskEditor({
           <textarea
             name="description"
             value={draft.description}
-            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+            onChange={(event) => changeDraft({ ...draft, description: event.target.value })}
+            disabled={saving}
           />
         </label>
         <Button disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</Button>
