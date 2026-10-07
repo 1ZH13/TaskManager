@@ -10,9 +10,16 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Bookmark, CalendarDays, ChevronDown, GripVertical, MoreHorizontal, UserRound } from 'lucide-react';
+import {
+  Bookmark,
+  CalendarDays,
+  ChevronDown,
+  GripVertical,
+  MoreHorizontal,
+  UserRound,
+} from 'lucide-react';
 import { demoIds, type RepositoryError } from '@task-manager/data';
 import { checkWorkItemTransition } from '@task-manager/domain';
 import { Button } from '../../../../packages/ui/src/index';
@@ -29,12 +36,20 @@ import type {
   WorkItem,
 } from '@task-manager/shared';
 import { useDemo } from './demo-context';
+import { AccessibleDialog } from './accessible-dialog';
 
 const priorityLabel: Record<WorkItem['priority'], string> = {
   LOW: 'Baja',
   MEDIUM: 'Media',
   HIGH: 'Alta',
   URGENT: 'Urgente',
+};
+const typeLabel: Record<WorkItem['type'], string> = {
+  TASK: 'Tarea',
+  RECURRING_TASK: 'Tarea recurrente',
+  INCIDENT: 'Incidencia',
+  SUBTASK: 'Subtarea',
+  MILESTONE: 'Hito',
 };
 
 function Column({
@@ -58,9 +73,14 @@ function Column({
   const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [limitOpen, setLimitOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
   const [creatingTask, setCreatingTask] = useState(false);
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: column.id });
-  const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+  } = useDraggable({
     id: `column:${column.id}`,
     disabled: actor.role !== 'ADMIN',
   });
@@ -73,9 +93,7 @@ function Column({
     const nextName = name.trim();
     setEditing(false);
     if (!nextName || nextName === column.name) return;
-    void repository
-      .updateBoardColumn(column.id, { name: nextName })
-      .then(refresh);
+    void repository.updateBoardColumn(column.id, { name: nextName }).then(refresh);
   };
   const remove = () => {
     if (window.confirm(`¿Eliminar la columna ${column.name}?`))
@@ -149,15 +167,24 @@ function Column({
             {column.name}
           </button>
         )}
-        <span className="column-count" aria-label={`${itemCount} tareas`}>{itemCount}</span>
+        <span className="column-count" aria-label={`${itemCount} tareas`}>
+          {itemCount}
+        </span>
         {actor.role === 'ADMIN' && (
           <div className="column-actions">
-            <button className="column-icon-button column-drag-handle" aria-label={`Arrastrar ${column.name}`} title="Arrastrar columna" {...attributes} {...listeners}>
+            <button
+              className="column-icon-button column-drag-handle"
+              aria-label={`Arrastrar ${column.name}`}
+              title="Arrastrar columna"
+              {...attributes}
+              {...listeners}
+            >
               <GripVertical size={16} aria-hidden="true" />
             </button>
             <button
               className="column-icon-button"
               aria-label={`Opciones de ${column.name}`}
+              ref={menuButton}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((open) => !open)}
             >
@@ -165,25 +192,89 @@ function Column({
             </button>
             {menuOpen && (
               <div className="column-menu" role="menu">
-                <button role="menuitem" onClick={() => { setLimitOpen(true); setMenuOpen(false); }}>Establecer límite de columna</button>
-                {canMoveLeft && <button role="menuitem" onClick={() => { onMove(-1); setMenuOpen(false); }}>Mover columna a la izquierda</button>}
-                {canMoveRight && <button role="menuitem" onClick={() => { onMove(1); setMenuOpen(false); }}>Mover columna a la derecha</button>}
-                <button className="column-menu-delete" role="menuitem" onClick={remove}>Eliminar columna</button>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    // The menu item unmounts; restore focus to its persistent trigger.
+                    menuButton.current?.focus();
+                    setLimitOpen(true);
+                    setMenuOpen(false);
+                  }}
+                >
+                  Establecer límite de columna
+                </button>
+                {canMoveLeft && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      onMove(-1);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    Mover columna a la izquierda
+                  </button>
+                )}
+                {canMoveRight && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      onMove(1);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    Mover columna a la derecha
+                  </button>
+                )}
+                <button className="column-menu-delete" role="menuitem" onClick={remove}>
+                  Eliminar columna
+                </button>
               </div>
             )}
           </div>
         )}
       </header>
       {limitOpen && (
-        <div className="column-limit-backdrop" role="presentation">
-          <form className="column-limit-dialog" role="dialog" aria-modal="true" aria-label="Límite de columna" onSubmit={saveLimit}>
-            <div><h3>Límite de columna</h3><button type="button" aria-label="Cerrar" onClick={() => setLimitOpen(false)}>×</button></div>
+        <AccessibleDialog
+          label="Límite de columna"
+          className="column-limit-dialog"
+          onClose={() => setLimitOpen(false)}
+        >
+          <form onSubmit={saveLimit}>
+            <div>
+              <h3>Límite de columna</h3>
+              <button type="button" aria-label="Cerrar" onClick={() => setLimitOpen(false)}>
+                ×
+              </button>
+            </div>
             <p>Define el mínimo y máximo de tareas permitidas en esta columna.</p>
-            <label>Mínimo<input name="minimum" type="number" min="0" defaultValue={column.minItems ?? ''} placeholder="Sin límite" /></label>
-            <label>Máximo<input name="maximum" type="number" min="1" defaultValue={column.maxItems ?? ''} placeholder="Sin límite" /></label>
-            <footer><button type="button" onClick={() => setLimitOpen(false)}>Cancelar</button><button>Guardar</button></footer>
+            <label>
+              Mínimo
+              <input
+                name="minimum"
+                type="number"
+                min="0"
+                defaultValue={column.minItems ?? ''}
+                placeholder="Sin límite"
+              />
+            </label>
+            <label>
+              Máximo
+              <input
+                name="maximum"
+                type="number"
+                min="1"
+                defaultValue={column.maxItems ?? ''}
+                placeholder="Sin límite"
+              />
+            </label>
+            <footer>
+              <button type="button" onClick={() => setLimitOpen(false)}>
+                Cancelar
+              </button>
+              <button>Guardar</button>
+            </footer>
           </form>
-        </div>
+        </AccessibleDialog>
       )}
       {children}
       {actor.role === 'ADMIN' && !creatingTask && (
@@ -195,12 +286,26 @@ function Column({
         <form className="column-create-form" onSubmit={createTask}>
           <input name="title" autoFocus placeholder="¿Qué hay que hacer?" required />
           <div className="column-create-actions">
-            <span aria-hidden="true"><Bookmark size={15} /></span>
-            <span aria-hidden="true"><ChevronDown size={15} /></span>
-            <span aria-hidden="true"><CalendarDays size={15} /></span>
-            <span aria-hidden="true"><UserRound size={15} /></span>
+            <span aria-hidden="true">
+              <Bookmark size={15} />
+            </span>
+            <span aria-hidden="true">
+              <ChevronDown size={15} />
+            </span>
+            <span aria-hidden="true">
+              <CalendarDays size={15} />
+            </span>
+            <span aria-hidden="true">
+              <UserRound size={15} />
+            </span>
             <button type="submit">Crear</button>
-            <button type="button" aria-label="Cancelar creación" onClick={() => setCreatingTask(false)}>×</button>
+            <button
+              type="button"
+              aria-label="Cancelar creación"
+              onClick={() => setCreatingTask(false)}
+            >
+              ×
+            </button>
           </div>
         </form>
       )}
@@ -241,7 +346,7 @@ function Card({
         {item.key} · {item.title}
       </button>
       <small>
-        {priorityLabel[item.priority]} · {item.type}
+        {priorityLabel[item.priority]} · {typeLabel[item.type]}
       </small>
       <label className="task-assignee" aria-label={`Asignar ${item.title}`}>
         <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -294,12 +399,10 @@ function BoardControls({
         onChanged();
       });
     else
-      void repository
-        .createBoard({ phId, projectId, name, teamIds: [] })
-        .then(() => {
-          setOpen(false);
-          onChanged();
-        });
+      void repository.createBoard({ phId, projectId, name, teamIds: [] }).then(() => {
+        setOpen(false);
+        onChanged();
+      });
   };
   const create = () =>
     void repository
@@ -355,6 +458,16 @@ function BoardControls({
 }
 
 export function OperationalBoard() {
+  const { phId, actor } = useDemo();
+  const params = useSearchParams();
+  // A new scope must never render the previous property's tasks or drafts.
+  const scope = [phId, actor.id, actor.role, params.get('projectId'), params.get('board')].join(
+    ':',
+  );
+  return <OperationalBoardContent key={scope} />;
+}
+
+function OperationalBoardContent() {
   const { phId, actor, repository } = useDemo();
   const router = useRouter();
   const pathname = usePathname();
@@ -373,13 +486,31 @@ export function OperationalBoard() {
   const [announcement, setAnnouncement] = useState('');
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<WorkItem | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const loadRequest = useRef(0);
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
   const load = useCallback(() => {
+    const request = ++loadRequest.current;
     void repository
       .listBoards({ phId, projectId })
       .then(async (nextBoards) => {
+        if (request !== loadRequest.current) return;
         const nextBoard = nextBoards.find((entry) => entry.id === boardId) ?? nextBoards[0];
-        if (!nextBoard) return;
+        if (!nextBoard) {
+          setError(null);
+          setBoards(nextBoards);
+          setBoard(null);
+          setColumns([]);
+          setItems([]);
+          setPeople([]);
+          setTeams([]);
+          setProviders([]);
+          setPolicy(undefined);
+          setSelected(null);
+          setDirty(false);
+          return;
+        }
         const [nextColumns, page, nextPolicy, nextPeople, nextTeams, nextProviders] =
           await Promise.all([
             repository.listBoardColumns({ phId, boardId: nextBoard.id }),
@@ -389,6 +520,8 @@ export function OperationalBoard() {
             repository.listTeams({ phId }),
             repository.listProviders({ phId }),
           ]);
+        if (request !== loadRequest.current) return;
+        setError(null);
         setBoards(nextBoards);
         setBoard(nextBoard);
         setColumns(nextColumns);
@@ -401,9 +534,25 @@ export function OperationalBoard() {
           current ? (page.items.find((item) => item.id === current.id) ?? null) : null,
         );
       })
-      .catch((failure: RepositoryError) => setError(failure.message));
+      .catch((failure: RepositoryError) => {
+        if (request === loadRequest.current) setError(failure.message);
+      })
+      .finally(() => {
+        if (request === loadRequest.current) setLoading(false);
+      });
   }, [boardId, phId, projectId, repository]);
-  useEffect(load, [load]);
+  useEffect(() => {
+    load();
+    return () => {
+      loadRequest.current += 1;
+    };
+  }, [load]);
+  const openTask = (item: WorkItem | null) => {
+    if (item?.id === selected?.id) return;
+    if (dirty && !window.confirm('Tienes cambios sin guardar. ¿Descartarlos y continuar?')) return;
+    setDirty(false);
+    setSelected(item);
+  };
   const q = params.get('q')?.toLowerCase() ?? '';
   const priority = params.get('priority') ?? '';
   const assignee = params.get('assignee') ?? '';
@@ -435,9 +584,9 @@ export function OperationalBoard() {
         : group === 'team'
           ? (teams.find((entry) => entry.id === item.teamId)?.name ?? 'Sin equipo')
           : group === 'type'
-            ? item.type
+            ? typeLabel[item.type]
             : group === 'priority'
-              ? item.priority
+              ? priorityLabel[item.priority]
               : 'Todas';
     return columns.reduce<Record<string, Array<[string, WorkItem[]]>>>((result, column) => {
       const buckets = new Map<string, WorkItem[]>();
@@ -485,7 +634,11 @@ export function OperationalBoard() {
       const [moved] = reordered.splice(from, 1);
       reordered.splice(to, 0, moved!);
       void repository
-        .reorderBoardColumns(phId, board?.id ?? '', reordered.map((column) => column.id))
+        .reorderBoardColumns(
+          phId,
+          board?.id ?? '',
+          reordered.map((column) => column.id),
+        )
         .then(load)
         .catch((failure: RepositoryError) => setError(failure.message));
       return;
@@ -504,7 +657,11 @@ export function OperationalBoard() {
     if (from < 0 || to < 0 || to >= reordered.length) return;
     [reordered[from], reordered[to]] = [reordered[to]!, reordered[from]!];
     void repository
-      .reorderBoardColumns(phId, board.id, reordered.map((column) => column.id))
+      .reorderBoardColumns(
+        phId,
+        board.id,
+        reordered.map((column) => column.id),
+      )
       .then(load)
       .catch((failure: RepositoryError) => setError(failure.message));
   };
@@ -603,7 +760,13 @@ export function OperationalBoard() {
         {announcement}
       </p>
       {actor.role === 'ADMIN' && (
-        <BoardControls boards={boards} current={board} projectId={projectId} onSelect={selectBoard} onChanged={load} />
+        <BoardControls
+          boards={boards}
+          current={board}
+          projectId={projectId}
+          onSelect={selectBoard}
+          onChanged={load}
+        />
       )}
       {creating && false && (
         <form className="entity-form" onSubmit={create}>
@@ -765,7 +928,7 @@ export function OperationalBoard() {
             <option value="">Todos</option>
             {['TASK', 'RECURRING_TASK', 'INCIDENT', 'SUBTASK', 'MILESTONE'].map((entry) => (
               <option key={entry} value={entry}>
-                {priorityLabel[entry as WorkItem['priority']]}
+                {typeLabel[entry as WorkItem['type']]}
               </option>
             ))}
           </select>
@@ -873,6 +1036,27 @@ export function OperationalBoard() {
           {error}
         </p>
       )}
+      {loading && !board && <p role="status">Cargando tablero…</p>}
+      {!loading && !board && !error && (
+        <p role="status">
+          Este proyecto no tiene tableros.{' '}
+          {actor.role === 'ADMIN'
+            ? 'Crea un tablero para organizar sus tareas.'
+            : 'Solicita un tablero a la administración.'}
+        </p>
+      )}
+      {error && !board && (
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setError(null);
+            setLoading(true);
+            load();
+          }}
+        >
+          Reintentar
+        </Button>
+      )}
       <DndContext sensors={sensors} onDragEnd={dragEnd}>
         <div className="kanban" aria-label="Tablero de tareas">
           {columns.map((column, index) => (
@@ -893,7 +1077,7 @@ export function OperationalBoard() {
                       key={item.id}
                       item={item}
                       columns={columns}
-                      onOpen={() => setSelected(item)}
+                      onOpen={() => openTask(item)}
                       onMove={(columnId) => move(item, columnId)}
                     />
                   ))}
@@ -901,7 +1085,7 @@ export function OperationalBoard() {
               ))}
             </Column>
           ))}
-          {actor.role === 'ADMIN' && (
+          {actor.role === 'ADMIN' && board && (
             <button className="kanban-add-column" onClick={createColumn}>
               + Añadir columna
             </button>
@@ -910,10 +1094,12 @@ export function OperationalBoard() {
       </DndContext>
       {selected && (
         <TaskEditor
+          key={selected.id}
           item={selected}
-          onClose={() => setSelected(null)}
+          onClose={() => openTask(null)}
           onChanged={load}
           onError={setError}
+          onDirtyChange={setDirty}
         />
       )}
     </section>
@@ -925,11 +1111,13 @@ function TaskEditor({
   onClose,
   onChanged,
   onError,
+  onDirtyChange,
 }: {
   item: WorkItem;
   onClose: () => void;
   onChanged: () => void;
   onError: (message: string) => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const { phId, actor, repository } = useDemo();
   const [subtask, setSubtask] = useState(false);
@@ -937,6 +1125,21 @@ function TaskEditor({
   const [comments, setComments] = useState<WorkComment[]>([]);
   const [attachments, setAttachments] = useState<WorkAttachment[]>([]);
   const [activity, setActivity] = useState<WorkActivity[]>([]);
+  const [draft, setDraft] = useState(() => ({
+    title: item.title,
+    description: item.description ?? '',
+    priority: item.priority,
+    blockedReason: item.blockedReason ?? '',
+  }));
+  const [savedDraft, setSavedDraft] = useState(draft);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState('');
+  const isDirty = Object.keys(draft).some(
+    (key) => draft[key as keyof typeof draft] !== savedDraft[key as keyof typeof draft],
+  );
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
   const loadDetail = useCallback(() => {
     void Promise.all([
       repository.listWorkItems({ phId, boardId: item.boardId, parentId: item.id }),
@@ -955,17 +1158,23 @@ function TaskEditor({
   useEffect(loadDetail, [loadDetail]);
   const save = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    setSaving(true);
+    setNotice('');
     void repository
       .updateWorkItem(item.id, {
         version: item.version,
-        title: String(form.get('title')),
-        description: String(form.get('description')) || undefined,
-        priority: String(form.get('priority')) as WorkItem['priority'],
-        blockedReason: String(form.get('blockedReason')) || undefined,
+        title: draft.title,
+        description: draft.description || undefined,
+        priority: draft.priority,
+        blockedReason: draft.blockedReason || undefined,
       })
-      .then(onChanged)
-      .catch((failure: RepositoryError) => onError(failure.message));
+      .then(() => {
+        setSavedDraft(draft);
+        setNotice('Cambios guardados.');
+        onChanged();
+      })
+      .catch((failure: RepositoryError) => onError(failure.message))
+      .finally(() => setSaving(false));
   };
   const createSubtask = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -998,18 +1207,20 @@ function TaskEditor({
   };
   const comment = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const body = String(new FormData(event.currentTarget).get('body'));
+    const form = event.currentTarget;
+    const body = String(new FormData(form).get('body'));
     void repository
       .addComment({ phId, workItemId: item.id, body })
       .then(() => {
-        event.currentTarget.reset();
+        form.reset();
         loadDetail();
       })
       .catch((failure: RepositoryError) => onError(failure.message));
   };
   const attach = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const name = String(new FormData(event.currentTarget).get('name'));
+    const form = event.currentTarget;
+    const name = String(new FormData(form).get('name'));
     void repository
       .addAttachment({
         phId,
@@ -1020,13 +1231,18 @@ function TaskEditor({
         url: `https://demo.local/adjuntos/${encodeURIComponent(name)}`,
       })
       .then(() => {
-        event.currentTarget.reset();
+        form.reset();
         loadDetail();
       })
       .catch((failure: RepositoryError) => onError(failure.message));
   };
   const remove = () => {
-    if (!window.confirm(`¿Eliminar la tarea ${item.key}? También se eliminarán sus subtareas y actividad.`)) return;
+    if (
+      !window.confirm(
+        `¿Eliminar la tarea ${item.key}? También se eliminarán sus subtareas y actividad.`,
+      )
+    )
+      return;
     void repository
       .deleteWorkItem(phId, item.id, item.version)
       .then(() => {
@@ -1046,29 +1262,51 @@ function TaskEditor({
       <form className="entity-form" onSubmit={save}>
         <label>
           Título
-          <input name="title" defaultValue={item.title} required />
+          <input
+            name="title"
+            value={draft.title}
+            onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+            required
+          />
         </label>
         <label>
           Prioridad
-          <select name="priority" defaultValue={item.priority}>
+          <select
+            name="priority"
+            value={draft.priority}
+            onChange={(event) =>
+              setDraft({ ...draft, priority: event.target.value as WorkItem['priority'] })
+            }
+          >
             {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map((entry) => (
-              <option key={entry} value={entry}>{priorityLabel[entry as WorkItem['priority']]}</option>
+              <option key={entry} value={entry}>
+                {priorityLabel[entry as WorkItem['priority']]}
+              </option>
             ))}
           </select>
         </label>
         <label>
           Motivo de bloqueo
-          <input name="blockedReason" defaultValue={item.blockedReason} />
+          <input
+            name="blockedReason"
+            value={draft.blockedReason}
+            onChange={(event) => setDraft({ ...draft, blockedReason: event.target.value })}
+          />
         </label>
         <label>
           <span>Descripción</span>
-          <textarea name="description" defaultValue={item.description} />
+          <textarea
+            name="description"
+            value={draft.description}
+            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+          />
         </label>
-        <Button>Guardar cambios</Button>
+        <Button disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</Button>
         <Button type="button" variant="danger" onClick={remove}>
           Eliminar tarea
         </Button>
       </form>
+      {notice && <p role="status">{notice}</p>}
       <h3>Subtareas ({subtasks.length})</h3>
       <ul>
         {subtasks.map((entry) => (

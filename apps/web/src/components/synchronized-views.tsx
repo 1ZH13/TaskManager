@@ -1,35 +1,34 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
 import {
   completionPercent,
   expandOccurrences,
   selectWorkItems,
   timelineAlerts,
 } from '@task-manager/domain';
-import { demoIds, type RepositoryError } from '@task-manager/data';
+import { DataError, demoIds } from '@task-manager/data';
 import type { Board, BoardColumn, Person, WorkItem } from '@task-manager/shared';
 import { Button } from '../../../../packages/ui/src/index';
 import { IconButton } from '../../../../packages/ui/src/index';
 import { Pencil, Trash2 } from 'lucide-react';
-import { demoSeed, useDemo } from './demo-context';
+import { useDemo } from './demo-context';
 import { FilterSelect } from './filter-select';
+import { AccessibleDialog } from './accessible-dialog';
 
 type View = 'list' | 'calendar' | 'timeline';
 const today = '2026-09-19';
-const monthDays = Array.from(
-  { length: 30 },
-  (_, index) => `2026-09-${String(index + 1).padStart(2, '0')}`,
-);
-const daysAt = (offset: number, week: boolean) =>
-  monthDays
-    .map((day) => {
-      const value = new Date(`${day}T00:00:00Z`);
-      value.setUTCDate(value.getUTCDate() + offset);
-      return value.toISOString().slice(0, 10);
-    })
-    .slice(week ? 14 : 0, week ? 21 : 30);
+const daysAt = (anchor: string, week: boolean) => {
+  const date = new Date(`${anchor}T00:00:00Z`);
+  if (week) date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  else date.setUTCDate(1);
+  const count = week
+    ? 7
+    : new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  return Array.from({ length: count }, (_, index) =>
+    addDays(date.toISOString().slice(0, 10), index),
+  );
+};
 const label = (date: string) =>
   new Intl.DateTimeFormat('es-PA', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
     new Date(`${date}T00:00:00Z`),
@@ -45,12 +44,6 @@ const addDays = (date: string, amount: number) => {
 };
 const daysBetween = (from: string, to: string) =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
-const priorityLabel: Record<WorkItem['priority'], string> = {
-  LOW: 'Baja',
-  MEDIUM: 'Media',
-  HIGH: 'Alta',
-  URGENT: 'Urgente',
-};
 const recurrenceLabel: Record<NonNullable<WorkItem['recurrence']>['frequency'], string> = {
   DAILY: 'Diaria',
   WEEKLY: 'Semanal',
@@ -58,14 +51,6 @@ const recurrenceLabel: Record<NonNullable<WorkItem['recurrence']>['frequency'], 
   ANNUAL: 'Anual',
   CUSTOM: 'Personalizada',
 };
-const listFeatures = tableFeatures({});
-const listColumnHelper = createColumnHelper<typeof listFeatures, WorkItem>();
-const listColumns = listColumnHelper.columns([
-  listColumnHelper.accessor('key', { header: 'Clave' }),
-  listColumnHelper.accessor('title', { header: 'Tarea' }),
-  listColumnHelper.accessor('priority', { header: 'Prioridad', cell: (info) => priorityLabel[info.getValue()] }),
-  listColumnHelper.accessor('startsOn', { header: 'Inicio' }),
-]);
 
 export function SynchronizedViews({
   view,
@@ -74,9 +59,27 @@ export function SynchronizedViews({
   view: View;
   projectId?: string;
 }) {
-  const { phId, actor, repository } = useDemo();
-  const projectName =
-    demoSeed.projects.find((project) => project.id === projectId)?.name ?? 'Proyecto';
+  const demo = useDemo();
+  return (
+    <ScopedViews
+      key={`${demo.phId}:${projectId}:${demo.actor.id}:${demo.actor.role}`}
+      view={view}
+      projectId={projectId}
+      demo={demo}
+    />
+  );
+}
+
+function ScopedViews({
+  view,
+  projectId,
+  demo,
+}: {
+  view: View;
+  projectId: string;
+  demo: ReturnType<typeof useDemo>;
+}) {
+  const { phId, actor, repository } = demo;
   const [items, setItems] = useState<WorkItem[]>([]);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
@@ -85,30 +88,90 @@ export function SynchronizedViews({
   const [assigneeId, setAssigneeId] = useState('');
   const [startsFrom, setStartsFrom] = useState('');
   const [startsTo, setStartsTo] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
   const [calendarMode, setCalendarMode] = useState<'month' | 'week' | 'agenda'>('week');
   const [zoom, setZoom] = useState<'week' | 'month' | 'quarter'>('month');
-  const [error, setError] = useState<RepositoryError | null>(null);
-  const load = useCallback(() => {
-    void Promise.all([
-      repository.listWorkItems({ phId, projectId }),
-      repository.listBoards({ phId, projectId }),
-      repository.listPeople({ phId }),
-    ])
-      .then(async ([page, nextBoards, nextPeople]) => {
-        const boardColumns = (
-          await Promise.all(
-            nextBoards.map((board) => repository.listBoardColumns({ phId, boardId: board.id })),
-          )
-        ).flat();
-        setItems(page.items);
-        setColumns(boardColumns);
-        setBoards(nextBoards);
-        setPeople(nextPeople);
-      })
-      .catch(setError);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const requestId = useRef(0);
+  const generation = useRef(0);
+  const operationPending = useRef(false);
+  const load = useCallback(async () => {
+    const request = ++requestId.current;
+    try {
+      const [page, nextBoards, nextPeople] = await Promise.all([
+        repository.listWorkItems({ phId, projectId }),
+        repository.listBoards({ phId, projectId }),
+        repository.listPeople({ phId }),
+      ]);
+      const boardColumns = (
+        await Promise.all(
+          nextBoards.map((board) => repository.listBoardColumns({ phId, boardId: board.id })),
+        )
+      ).flat();
+      if (request !== requestId.current) return false;
+      setItems(page.items);
+      setColumns(boardColumns);
+      setBoards(nextBoards);
+      setPeople(nextPeople);
+      setLoaded(true);
+      setError(null);
+      return true;
+    } catch (failure) {
+      if (request === requestId.current)
+        setError(
+          failure instanceof DataError
+            ? failure.message
+            : 'No se pudieron cargar las tareas. Inténtalo de nuevo.',
+        );
+      return false;
+    } finally {
+      if (request === requestId.current) setLoading(false);
+    }
   }, [phId, projectId, repository]);
-  useEffect(load, [load]);
+  const invalidate = useCallback(() => {
+    requestId.current++;
+    generation.current++;
+  }, []);
+  useEffect(() => {
+    // Repository results settle asynchronously; the effect itself does not derive UI state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    return invalidate;
+  }, [load, invalidate]);
+  const perform = async (operation: () => Promise<unknown>) => {
+    if (operationPending.current) return false;
+    const current = generation.current;
+    operationPending.current = true;
+    setPending(true);
+    setError(null);
+    try {
+      await operation();
+      if (current !== generation.current) return false;
+      const refreshed = await load();
+      if (current !== generation.current) return false;
+      if (!refreshed)
+        setError(
+          (reason) =>
+            `El cambio se guardó, pero no pudimos actualizar la vista. Vuelve a cargar; no repitas el cambio.${reason ? ` ${reason}` : ''}`,
+        );
+      return true;
+    } catch (failure) {
+      if (current === generation.current)
+        setError(
+          failure instanceof DataError
+            ? failure.message
+            : 'No se pudo guardar el cambio. Tus datos siguen disponibles; revisa e inténtalo de nuevo.',
+        );
+      return false;
+    } finally {
+      if (current === generation.current) {
+        operationPending.current = false;
+        setPending(false);
+      }
+    }
+  };
   const filtered = useMemo(
     () =>
       selectWorkItems(items, columns, { query, assigneeId: assigneeId || undefined }).filter(
@@ -119,36 +182,31 @@ export function SynchronizedViews({
     [items, columns, query, assigneeId, startsFrom, startsTo],
   );
   const updateDate = (item: WorkItem, startsOn: string) =>
-    void repository
-      .updateWorkItem(item.id, {
+    perform(() =>
+      repository.updateWorkItem(item.id, {
         version: item.version,
         startsOn,
         dueOn: item.dueOn && item.dueOn < startsOn ? startsOn : item.dueOn,
-      })
-      .then(load)
-      .catch(setError);
+      }),
+    );
   const update = (item: WorkItem, change: Partial<WorkItem>) =>
-    void repository
-      .updateWorkItem(item.id, { version: item.version, ...change })
-      .then(load)
-      .catch(setError);
+    perform(() => repository.updateWorkItem(item.id, { version: item.version, ...change }));
   const move = (item: WorkItem, columnId: string) =>
-    void repository
-      .moveWorkItem({
+    perform(() =>
+      repository.moveWorkItem({
         id: item.id,
         phId,
         columnId,
         position: items.filter((candidate) => candidate.columnId === columnId).length,
         version: item.version,
-      })
-      .then(load)
-      .catch(setError);
+      }),
+    );
   const createForDate = (startsOn: string) => {
     const column = columns[0];
     const board = boards[0];
     if (!column || !board) return;
-    void repository
-      .createWorkItem({
+    return perform(() =>
+      repository.createWorkItem({
         phId,
         projectId,
         boardId: board.id,
@@ -167,19 +225,18 @@ export function SynchronizedViews({
         validationStatus: 'NOT_REQUIRED',
         position: items.length,
         labels: [],
-      })
-      .then(load)
-      .catch(setError);
+      }),
+    );
   };
   const createRecurring = (form: FormData) => {
     const column = columns[0];
     const board = boards[0];
-    if (!column || !board) return;
+    if (!column || !board) return Promise.resolve(false);
     const startsOn = String(form.get('startsOn'));
     const endsOn = String(form.get('endsOn')) || undefined;
     const occurrenceCount = Number(form.get('occurrenceCount')) || undefined;
-    void repository
-      .createWorkItem({
+    return perform(() =>
+      repository.createWorkItem({
         phId,
         projectId,
         boardId: board.id,
@@ -193,7 +250,9 @@ export function SynchronizedViews({
         startsOn,
         dueOn: startsOn,
         recurrence: {
-          frequency: String(form.get('frequency')) as NonNullable<WorkItem['recurrence']>['frequency'],
+          frequency: String(form.get('frequency')) as NonNullable<
+            WorkItem['recurrence']
+          >['frequency'],
           interval: Number(form.get('interval')) || 1,
           startsOn,
           ...(endsOn ? { endsOn } : { occurrenceCount: occurrenceCount || 10 }),
@@ -205,22 +264,28 @@ export function SynchronizedViews({
         validationStatus: 'NOT_REQUIRED',
         position: items.length,
         labels: ['recurrente'],
-      })
-      .then(load)
-      .catch(setError);
+      }),
+    );
   };
-  if (error)
+  if (loading) return <p role="status">Cargando tareas…</p>;
+  if (error && !loaded)
     return (
       <section className="tm-state tm-state--error" role="alert">
-        <p>{error.message}</p>
-        <Button onClick={load}>Reintentar</Button>
+        <p>{error}</p>
+        <Button
+          onClick={() => {
+            setLoading(true);
+            void load();
+          }}
+        >
+          Reintentar
+        </Button>
       </section>
     );
   return (
-    <section className="workspace-page synced-view">
+    <section className="workspace-page synced-view" aria-busy={pending}>
       <header className="view-heading">
         <div>
-          <p className="eyebrow">{projectName}</p>
           <h1>
             {view === 'list'
               ? 'Lista de tareas'
@@ -228,18 +293,25 @@ export function SynchronizedViews({
                 ? 'Calendario'
                 : 'Cronograma'}
           </h1>
-          <p>Esta vista lee las mismas tareas, permisos y reglas que el tablero.</p>
         </div>
       </header>
-      {view === 'list' && <RecurrenceComposer people={people} onCreate={createRecurring} />}
+      {error && (
+        <div role="alert">
+          <p>{error}</p>
+          <Button variant="secondary" onClick={() => void load()}>
+            Volver a cargar
+          </Button>
+        </div>
+      )}
+      {pending && <p role="status">Guardando cambios…</p>}
+      {view === 'list' && actor.role === 'ADMIN' && (
+        <RecurrenceComposer people={people} onCreate={createRecurring} />
+      )}
       {view === 'list' ? (
         <ListView
           items={filtered}
           columns={columns}
           people={people}
-          selected={selected}
-          setSelected={setSelected}
-          updateDate={updateDate}
           update={update}
           move={move}
           query={query}
@@ -250,9 +322,12 @@ export function SynchronizedViews({
           setStartsFrom={setStartsFrom}
           startsTo={startsTo}
           setStartsTo={setStartsTo}
-          canSelect={actor.role === 'ADMIN'}
           canEdit={actor.role === 'ADMIN'}
-          onDelete={(item) => void repository.deleteWorkItem(phId, item.id, item.version).then(load).catch(setError)}
+          pending={pending}
+          error={error}
+          onDelete={(item) =>
+            void perform(() => repository.deleteWorkItem(phId, item.id, item.version))
+          }
         />
       ) : view === 'calendar' ? (
         <CalendarView
@@ -281,12 +356,15 @@ function RecurrenceComposer({
   onCreate,
 }: {
   people: Person[];
-  onCreate: (form: FormData) => void;
+  onCreate: (form: FormData) => Promise<boolean>;
 }) {
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+  const [saving, setSaving] = useState(false);
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onCreate(new FormData(event.currentTarget));
-    event.currentTarget.reset();
+    const form = event.currentTarget;
+    setSaving(true);
+    if (await onCreate(new FormData(form))) form.reset();
+    setSaving(false);
   };
   return (
     <details className="recurrence-composer">
@@ -332,38 +410,9 @@ function RecurrenceComposer({
           O repeticiones
           <input name="occurrenceCount" type="number" min="1" placeholder="Si no hay fecha final" />
         </label>
-        <Button>Crear recurrencia</Button>
+        <Button disabled={saving}>{saving ? 'Creando…' : 'Crear recurrencia'}</Button>
       </form>
     </details>
-  );
-}
-function TanStackList({ items }: { items: WorkItem[] }) {
-  const table = useTable({ features: listFeatures, columns: listColumns, data: items });
-  return (
-    <table className="sr-only" aria-label="Modelo de tabla configurable">
-      <thead>
-        {table.getHeaderGroups().map((group) => (
-          <tr key={group.id}>
-            {group.headers.map((header) => (
-              <th key={header.id}>
-                {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-              </th>
-            ))}
-          </tr>
-        ))}
-      </thead>
-      <tbody>
-        {table.getRowModel().rows.map((row) => (
-          <tr key={row.id}>
-            {row.getAllCells().map((cell) => (
-              <td key={cell.id}>
-                <table.FlexRender cell={cell} />
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }
 function State({ item, columns }: { item: WorkItem; columns: BoardColumn[] }) {
@@ -384,9 +433,6 @@ function ListView({
   items,
   columns,
   people,
-  selected,
-  setSelected,
-  updateDate,
   update,
   move,
   query,
@@ -397,17 +443,15 @@ function ListView({
   setStartsFrom,
   startsTo,
   setStartsTo,
-  canSelect,
   canEdit,
+  pending,
+  error,
   onDelete,
 }: {
   items: WorkItem[];
   columns: BoardColumn[];
   people: Person[];
-  selected: string[];
-  setSelected: (ids: string[]) => void;
-  updateDate: (item: WorkItem, date: string) => void;
-  update: (item: WorkItem, change: Partial<WorkItem>) => void;
+  update: (item: WorkItem, change: Partial<WorkItem>) => Promise<boolean>;
   move: (item: WorkItem, columnId: string) => void;
   query: string;
   setQuery: (value: string) => void;
@@ -417,8 +461,9 @@ function ListView({
   setStartsFrom: (date: string) => void;
   startsTo: string;
   setStartsTo: (date: string) => void;
-  canSelect: boolean;
   canEdit: boolean;
+  pending: boolean;
+  error: string | null;
   onDelete: (item: WorkItem) => void;
 }) {
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
@@ -444,74 +489,166 @@ function ListView({
         />
         <label className="view-filter view-filter--date">
           Desde
-          <input aria-label="Filtrar tareas desde" type="date" value={startsFrom} max={startsTo || undefined} onChange={(event) => setStartsFrom(event.target.value)} />
+          <input
+            aria-label="Filtrar tareas desde"
+            type="date"
+            value={startsFrom}
+            max={startsTo || undefined}
+            onChange={(event) => setStartsFrom(event.target.value)}
+          />
         </label>
         <label className="view-filter view-filter--date">
           Hasta
-          <input aria-label="Filtrar tareas hasta" type="date" value={startsTo} min={startsFrom || undefined} onChange={(event) => setStartsTo(event.target.value)} />
+          <input
+            aria-label="Filtrar tareas hasta"
+            type="date"
+            value={startsTo}
+            min={startsFrom || undefined}
+            onChange={(event) => setStartsTo(event.target.value)}
+          />
         </label>
       </div>
-      <p role="status">{selected.length} tareas seleccionadas</p>
-      <TanStackList items={items} />
+      <p role="status">
+        {items.length ? `${items.length} tareas` : 'No hay tareas que coincidan con los filtros.'}
+      </p>
       <div className="task-table" role="table" aria-label="Lista de tareas">
         <div role="row" className="task-table__head">
-          <span>ID de la tarea</span>
-          <span>Nombre de la tarea</span>
-          <span>Descripción de la tarea</span>
-          <span>Recurrencia</span>
-          <span>Estado</span>
-          <span>Acciones</span>
+          <span role="columnheader">ID de la tarea</span>
+          <span role="columnheader">Nombre de la tarea</span>
+          <span role="columnheader">Descripción de la tarea</span>
+          <span role="columnheader">Recurrencia</span>
+          <span role="columnheader">Estado</span>
+          <span role="columnheader">Acciones</span>
         </div>
         {items.map((item) => (
           <div role="row" key={item.id}>
-            <strong>{item.key}</strong>
-            <strong>{item.title}</strong>
-            <span>{item.description ?? 'Sin descripción'}</span>
-            <span>{item.recurrence ? recurrenceLabel[item.recurrence.frequency] : 'No recurrente'}</span>
-            <select
-              aria-label={`Estado de ${item.title}`}
-              value={item.columnId}
-              onChange={(event) => move(item, event.target.value)}
-            >
-              {columns.map((column) => (
-                <option key={column.id} value={column.id}>
-                  {column.name}
-                </option>
-              ))}
-            </select>
-            <span className="task-table__actions">
-              {canEdit && <>
-                <IconButton label={`Editar ${item.title}`} onClick={() => setEditingItem(item)}><Pencil size={16} /></IconButton>
-                <IconButton label={`Eliminar ${item.title}`} onClick={() => {
-                  if (window.confirm(`¿Eliminar ${item.title}?`)) onDelete(item);
-                }}><Trash2 size={16} /></IconButton>
-              </>}
+            <strong role="cell">{item.key}</strong>
+            <strong role="cell">{item.title}</strong>
+            <span role="cell">{item.description ?? 'Sin descripción'}</span>
+            <span role="cell">
+              {item.recurrence ? recurrenceLabel[item.recurrence.frequency] : 'No recurrente'}
+            </span>
+            <span role="cell">
+              <select
+                disabled={pending}
+                aria-label={`Estado de ${item.title}`}
+                value={item.columnId}
+                onChange={(event) => move(item, event.target.value)}
+              >
+                {columns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.name}
+                  </option>
+                ))}
+              </select>
+            </span>
+            <span role="cell" className="task-table__actions">
+              {canEdit && (
+                <>
+                  <IconButton label={`Editar ${item.title}`} onClick={() => setEditingItem(item)}>
+                    <Pencil size={16} />
+                  </IconButton>
+                  <IconButton
+                    disabled={pending}
+                    label={`Eliminar ${item.title}`}
+                    onClick={() => {
+                      if (window.confirm(`¿Eliminar ${item.title}?`)) onDelete(item);
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </IconButton>
+                </>
+              )}
             </span>
           </div>
         ))}
       </div>
-      {editingItem && <TaskEditModal item={editingItem} onClose={() => setEditingItem(null)} onSave={(change) => { update(editingItem, change); setEditingItem(null); }} />}
+      {editingItem && (
+        <TaskEditModal
+          item={editingItem}
+          failureMessage={error}
+          onClose={() => setEditingItem(null)}
+          onSave={(change) => update(editingItem, change)}
+        />
+      )}
     </>
   );
 }
-function TaskEditModal({ item, onClose, onSave }: { item: WorkItem; onClose: () => void; onSave: (change: Partial<WorkItem>) => void }) {
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+function TaskEditModal({
+  item,
+  onClose,
+  onSave,
+  failureMessage,
+}: {
+  item: WorkItem;
+  onClose: () => void;
+  onSave: (change: Partial<WorkItem>) => Promise<boolean>;
+  failureMessage: string | null;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const close = () => {
+    if (!saving) onClose();
+  };
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const title = String(form.get('title')).trim();
-    if (title) onSave({ title, description: String(form.get('description')).trim() || undefined });
+    if (!title || saving) return;
+    setSaving(true);
+    setFailed(false);
+    if (await onSave({ title, description: String(form.get('description')).trim() || undefined }))
+      onClose();
+    else setFailed(true);
+    setSaving(false);
   };
   return (
-    <div className="task-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
-        <header><div><p className="eyebrow">Editar tarea</p><h2 id="task-modal-title">{item.key}</h2></div><button className="task-modal__close" type="button" aria-label="Cerrar" onClick={onClose}>×</button></header>
-        <form onSubmit={submit}>
-          <label>Nombre de la tarea<input name="title" defaultValue={item.title} required autoFocus /></label>
-          <label>Descripción<textarea name="description" defaultValue={item.description} placeholder="Agrega una descripción" /></label>
-          <footer><Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar cambios</Button></footer>
-        </form>
-      </section>
-    </div>
+    <AccessibleDialog className="task-modal" labelledBy="task-modal-title" onClose={close}>
+      <header>
+        <div>
+          <p className="eyebrow">Editar tarea</p>
+          <h2 id="task-modal-title">{item.key}</h2>
+        </div>
+        <button
+          disabled={saving}
+          className="task-modal__close"
+          type="button"
+          aria-label="Cerrar"
+          onClick={close}
+        >
+          ×
+        </button>
+      </header>
+      <form onSubmit={submit}>
+        <label>
+          Nombre de la tarea
+          <input name="title" defaultValue={item.title} required data-autofocus />
+        </label>
+        <label>
+          Descripción
+          <textarea
+            name="description"
+            defaultValue={item.description}
+            placeholder="Agrega una descripción"
+          />
+        </label>
+        {failed && (
+          <p role="alert">
+            {failureMessage ??
+              'No se guardaron los cambios. Conservamos lo que escribiste; puedes volver a intentarlo.'}
+          </p>
+        )}
+        {saving && <p role="status">Guardando…</p>}
+        <footer>
+          <Button disabled={saving} type="button" variant="secondary" onClick={close}>
+            Cancelar
+          </Button>
+          <Button disabled={saving} type="submit">
+            Guardar cambios
+          </Button>
+        </footer>
+      </form>
+    </AccessibleDialog>
   );
 }
 function CalendarView({
@@ -529,40 +666,44 @@ function CalendarView({
   mode: 'month' | 'week' | 'agenda';
   setMode: (mode: 'month' | 'week' | 'agenda') => void;
 }) {
-  const [offset, setOffset] = useState(0);
-  const calendarPicker = useRef<HTMLInputElement>(null);
-  const days = daysAt(offset, mode === 'week');
+  const [anchor, setAnchor] = useState(today);
+  const days = daysAt(anchor, mode === 'week');
   const unscheduled = items.filter((item) => !item.startsOn);
-  const occurrences = items.flatMap((item) => expandOccurrences(item, days[0]!, days.at(-1)!));
+  const events = items.flatMap((item) =>
+    item.recurrence
+      ? expandOccurrences(item, days[0]!, days.at(-1)!).map((occurrence) => ({
+          item,
+          date: occurrence.date,
+          key: `${item.id}-${occurrence.index}`,
+        }))
+      : item.startsOn && item.startsOn >= days[0]! && item.startsOn <= days.at(-1)!
+        ? [{ item, date: item.startsOn, key: item.id }]
+        : [],
+  );
   const drop = (id: string, day: string) => {
     const item = items.find((candidate) => candidate.id === id);
-    if (item) updateDate(item, day);
+    if (item && !item.recurrence) updateDate(item, day);
   };
-  const goToDate = (date: string) => {
-    const base = mode === 'week' ? '2026-09-15' : '2026-09-01';
-    const difference =
-      (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${base}T00:00:00Z`)) / 86_400_000;
-    setOffset(Math.round(difference));
-  };
-  const openTodayPicker = () => {
-    setOffset(0);
-    const picker = calendarPicker.current;
-    if (!picker) return;
-    try {
-      picker.showPicker();
-    } catch {
-      picker.focus();
+  const navigate = (direction: number) => {
+    if (mode === 'week') setAnchor(addDays(anchor, direction * 7));
+    else {
+      const next = new Date(`${anchor}T00:00:00Z`);
+      next.setUTCDate(1);
+      next.setUTCMonth(next.getUTCMonth() + direction);
+      setAnchor(next.toISOString().slice(0, 10));
     }
   };
   return (
     <>
       <div className="calendar-toolbar" aria-label="Controles de calendario">
         <div className="calendar-toolbar__views" role="group" aria-label="Vista">
-          {([
-            ['week', 'Semana'],
-            ['month', 'Mes'],
-            ['agenda', 'Agenda'],
-          ] as const).map(([nextMode, name]) => (
+          {(
+            [
+              ['week', 'Semana'],
+              ['month', 'Mes'],
+              ['agenda', 'Agenda'],
+            ] as const
+          ).map(([nextMode, name]) => (
             <button
               key={nextMode}
               type="button"
@@ -575,47 +716,34 @@ function CalendarView({
           ))}
         </div>
         <div className="calendar-toolbar__navigation" role="group" aria-label="Navegación">
-          <Button
-            variant="secondary"
-            onClick={() => setOffset((value) => value - (mode === 'week' ? 7 : 30))}
-          >
-            ‹
-            <span className="sr-only">Anterior</span>
+          <Button variant="secondary" onClick={() => navigate(-1)}>
+            ‹<span className="sr-only">Anterior</span>
           </Button>
-          <Button variant="secondary" onClick={openTodayPicker}>
-            Hoy
+          <Button variant="secondary" onClick={() => setAnchor(today)}>
+            Fecha de demostración
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => setOffset((value) => value + (mode === 'week' ? 7 : 30))}
-          >
-            <span className="sr-only">Siguiente</span>
-            ›
+          <Button variant="secondary" onClick={() => navigate(1)}>
+            <span className="sr-only">Siguiente</span>›
           </Button>
           <input
-            ref={calendarPicker}
-            className="calendar-toolbar__date-picker"
             type="date"
-            defaultValue={today}
+            value={anchor}
             aria-label="Elegir fecha del calendario"
-            onChange={(event) => event.target.value && goToDate(event.target.value)}
+            onChange={(event) => event.target.value && setAnchor(event.target.value)}
           />
         </div>
       </div>
+      <p role="status">
+        {label(days[0]!)} – {label(days.at(-1)!)}
+        {events.length === 0 ? ' · No hay tareas programadas en este período.' : ''}
+      </p>
       {mode === 'agenda' ? (
         <ul className="agenda">
-          {[
-            ...items.filter((item) => item.startsOn),
-            ...occurrences.map((occurrence) => ({
-              ...occurrence.workItem,
-              id: `${occurrence.workItem.id}-${occurrence.index}`,
-              startsOn: occurrence.date,
-            })),
-          ]
-            .sort((a, b) => (a.startsOn ?? '').localeCompare(b.startsOn ?? ''))
-            .map((item) => (
-              <li key={item.id}>
-                <time>{label(item.startsOn!)}</time>
+          {events
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map(({ item, date, key }) => (
+              <li key={key}>
+                <time dateTime={date}>{label(date)}</time>
                 <strong>
                   {item.key} · {item.title}
                 </strong>
@@ -625,7 +753,16 @@ function CalendarView({
         </ul>
       ) : (
         <div className={`calendar-workspace calendar-workspace--${mode}`}>
-          <div className={`calendar-grid calendar-grid--${mode}`}>
+          <p className="calendar-scroll-hint" id="calendar-scroll-hint">
+            Desplázate horizontalmente para ver todos los días, o usa Agenda.
+          </p>
+          <div
+            className={`calendar-grid calendar-grid--${mode}`}
+            role="region"
+            aria-label="Días del calendario"
+            aria-describedby="calendar-scroll-hint"
+            tabIndex={0}
+          >
             {days.map((day) => (
               <section
                 key={day}
@@ -634,15 +771,15 @@ function CalendarView({
               >
                 <header className="calendar-day__header">
                   <span>{mode === 'week' ? weekdayLabel(day) : label(day)}</span>
-                  {day === today && <b>Hoy</b>}
+                  {day === today && <b>Demo</b>}
                 </header>
-                {items
-                  .filter((item) => item.startsOn === day)
-                  .map((item) => (
+                {events
+                  .filter((event) => event.date === day)
+                  .map(({ item, key }) => (
                     <article
-                      key={item.id}
+                      key={key}
                       className={`calendar-event calendar-event--${item.priority.toLowerCase()}`}
-                      draggable
+                      draggable={!item.recurrence}
                       onDragStart={(event) => event.dataTransfer.setData('task', item.id)}
                     >
                       <span className="calendar-event__key">{item.key}</span>
@@ -650,6 +787,21 @@ function CalendarView({
                       <span className="calendar-event__meta">
                         <State item={item} columns={columns} />
                       </span>
+                      {item.recurrence ? (
+                        <small>Recurrente</small>
+                      ) : (
+                        <label>
+                          Fecha
+                          <input
+                            aria-label={`Fecha de ${item.title}`}
+                            type="date"
+                            value={item.startsOn ?? ''}
+                            onChange={(event) =>
+                              event.target.value && updateDate(item, event.target.value)
+                            }
+                          />
+                        </label>
+                      )}
                     </article>
                   ))}
                 <button
@@ -659,16 +811,6 @@ function CalendarView({
                 >
                   + Crear tarea
                 </button>
-                <label className="calendar-date-control">
-                  <span className="sr-only">Asignar fecha</span>
-                  <input
-                    type="date"
-                    onChange={(event) => {
-                      const item = unscheduled[0];
-                      if (item && event.target.value) updateDate(item, event.target.value);
-                    }}
-                  />
-                </label>
               </section>
             ))}
           </div>
@@ -685,7 +827,7 @@ function CalendarView({
                     {item.key} · {item.title}
                   </strong>
                   <label>
-                    Fecha accesible
+                    Fecha
                     <input
                       type="date"
                       onChange={(event) =>
@@ -755,9 +897,10 @@ function TimelineView({
                 {scaleMarks.map(({ date, offset }) => (
                   <span key={date} style={{ '--gantt-offset': offset } as CSSProperties}>
                     {zoom === 'quarter'
-                      ? new Intl.DateTimeFormat('es-PA', { month: 'short', timeZone: 'UTC' }).format(
-                          new Date(`${date}T00:00:00Z`),
-                        )
+                      ? new Intl.DateTimeFormat('es-PA', {
+                          month: 'short',
+                          timeZone: 'UTC',
+                        }).format(new Date(`${date}T00:00:00Z`))
                       : label(date)}
                   </span>
                 ))}
@@ -789,7 +932,9 @@ function TimelineView({
                         <input
                           type="date"
                           value={item.startsOn ?? ''}
-                          onChange={(event) => event.target.value && updateDate(item, event.target.value)}
+                          onChange={(event) =>
+                            event.target.value && updateDate(item, event.target.value)
+                          }
                         />
                       </label>
                       <label>
@@ -804,7 +949,10 @@ function TimelineView({
                       </label>
                     </div>
                   </div>
-                  <div className="gantt__track" style={{ '--gantt-days': gantt.days } as CSSProperties}>
+                  <div
+                    className="gantt__track"
+                    style={{ '--gantt-days': gantt.days } as CSSProperties}
+                  >
                     {visibleDuration > 0 && (
                       <div
                         className={`gantt__bar gantt__bar--${item.priority.toLowerCase()}`}
