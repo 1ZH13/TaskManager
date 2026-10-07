@@ -1223,7 +1223,7 @@ function OperationalBoardContent() {
           )}
         </div>
       </DndContext>
-      {selected && (
+      {selected && (!taskId || selected.id === taskId) && (
         <TaskEditor
           key={selected.id}
           item={selected}

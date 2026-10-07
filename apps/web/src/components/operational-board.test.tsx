@@ -137,11 +137,12 @@ describe('OperationalBoard UX', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
     params = url(other.id);
     rerender(<OperationalBoard />);
-    await screen.findByRole('heading', { name: other.key });
+    expect(screen.queryByRole('heading', { name: task.key })).toBeNull();
     await act(async () => {
       finish({ ...task, version: task.version + 1 });
       await pending;
     });
+    await screen.findByRole('heading', { name: other.key });
     expect(screen.getByRole('heading', { name: other.key })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: task.key })).toBeNull();
   });
