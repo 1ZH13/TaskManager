@@ -412,7 +412,7 @@ export function NotificationsPage() {
   useEffect(load, [load]);
   const href = (item: Notification) =>
     item.resourceType === 'WORK_ITEM'
-      ? `/operaciones/mantenimiento/tablero?taskId=${item.resourceId}`
+      ? `/operaciones/tablero?${new URLSearchParams({ taskId: item.resourceId, phId: item.phId })}`
       : item.resourceType === 'DOCUMENT'
         ? `/documentos?documentId=${item.resourceId}`
         : item.resourceType === 'FORM'

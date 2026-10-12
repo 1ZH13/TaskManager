@@ -193,14 +193,17 @@ export function FormsPage({ projectId: forcedProjectId }: { projectId?: string }
   };
   const submit = (form: FormDefinition, event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget));
+    const formElement = event.currentTarget;
+    const values = Object.fromEntries(new FormData(formElement));
+    setError(null);
+    setNotice(null);
     void repository
       .submitForm({ phId, formId: form.id, values })
       .then((submission) => {
         setNotice(
           submission.createdWorkItemId ? 'Envío recibido y tarea creada.' : 'Envío recibido.',
         );
-        event.currentTarget.reset();
+        formElement.reset();
       })
       .catch(setError);
   };
