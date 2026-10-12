@@ -106,6 +106,191 @@ afterEach(() => {
 });
 
 describe('SynchronizedViews', () => {
+  it('restaura modo y período de agenda desde URL tras abrir un detalle y volver', async () => {
+    nav.pathname = '/operaciones/calendario';
+    const rendered = render(<SynchronizedViews view="calendar" />);
+    await screen.findByText(task.title);
+    await userEvent.click(screen.getByRole('button', { name: 'Agenda' }));
+    fireEvent.change(screen.getByLabelText('Elegir fecha del calendario'), {
+      target: { value: '2026-10-12' },
+    });
+    expect(new URLSearchParams(nav.query).get('calendarMode')).toBe('agenda');
+    expect(new URLSearchParams(nav.query).get('date')).toBe('2026-10-12');
+    rendered.unmount();
+    render(<SynchronizedViews view="calendar" />);
+    await screen.findByRole('button', { name: 'Agenda' });
+    expect(screen.getByRole('button', { name: 'Agenda' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect((screen.getByLabelText('Elegir fecha del calendario') as HTMLInputElement).value).toBe(
+      '2026-10-12',
+    );
+  });
+
+  it('descarta fechas y modos inválidos provenientes de URL', async () => {
+    nav.query = 'date=2026-02-31&calendarMode=unknown';
+    render(<SynchronizedViews view="calendar" />);
+    await screen.findByText(task.title);
+    expect((screen.getByLabelText('Elegir fecha del calendario') as HTMLInputElement).value).toBe(
+      '2026-09-19',
+    );
+    expect(screen.getByRole('button', { name: 'Semana' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+  it('ordena la lista sin cambiar el ranking del repositorio y restablece el orden', async () => {
+    const user = userEvent.setup();
+    const move = vi.spyOn(context.repository, 'moveWorkItem');
+    render(<SynchronizedViews view="list" />);
+    await screen.findByText(task.title);
+    await user.click(screen.getByRole('button', { name: 'Nombre de la tarea' }));
+    const rows = within(screen.getByRole('table')).getAllByRole('row');
+    expect(rows[1]!.textContent).toContain('Inspección semanal');
+    expect(
+      screen.getByRole('columnheader', { name: 'Nombre de la tarea' }).getAttribute('aria-sort'),
+    ).toBe('ascending');
+    await user.click(screen.getByRole('button', { name: 'Nombre de la tarea' }));
+    expect(within(screen.getByRole('table')).getAllByRole('row')[1]!.textContent).toContain(
+      task.title,
+    );
+    expect(move).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Restablecer orden' }));
+    expect(new URLSearchParams(nav.query).has('sort')).toBe(false);
+  });
+
+  it('configura columnas con teclado, conserva preferencias al filtrar y restaura al remontar', async () => {
+    const user = userEvent.setup();
+    const rendered = render(<SynchronizedViews view="list" />);
+    await user.click(await screen.findByRole('button', { name: 'Columnas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Configurar columnas' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Descripción de la tarea' }));
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Prioridad' }));
+    const left = within(dialog).getByRole('button', { name: 'Mover Prioridad a la izquierda' });
+    left.focus();
+    await user.keyboard('{Enter}');
+    await user.click(within(dialog).getByRole('button', { name: 'Listo' }));
+    const names = () =>
+      screen.getAllByRole('columnheader').map((header) => header.textContent?.trim());
+    expect(names()).toEqual([
+      'ID de la tarea',
+      'Nombre de la tarea',
+      'Recurrencia',
+      'Prioridad',
+      'Estado',
+      'Acciones',
+    ]);
+    await user.type(screen.getByLabelText('Buscar o filtrar'), 'bomba');
+    expect(new URLSearchParams(nav.query).get('fields')).toContain('priority,state');
+    rendered.unmount();
+    render(<SynchronizedViews view="list" />);
+    await screen.findByRole('table');
+    expect(names()).toContain('Prioridad');
+    expect(names()).not.toContain('Descripción de la tarea');
+  });
+
+  it('solo ofrece destinos del tablero de cada tarea', async () => {
+    const boards = await context.repository.listBoards({
+      phId: context.phId,
+      projectId: demoIds.opsProject,
+    });
+    const board = boards[0]!;
+    vi.spyOn(context.repository, 'listBoards').mockResolvedValue([
+      board,
+      { ...board, id: 'other-board' },
+    ]);
+    const original = context.repository.listBoardColumns.bind(context.repository);
+    vi.spyOn(context.repository, 'listBoardColumns').mockImplementation(
+      (query: Parameters<typeof context.repository.listBoardColumns>[0]) =>
+        query.boardId === 'other-board'
+          ? Promise.resolve([
+              {
+                id: 'foreign-column',
+                phId: context.phId,
+                boardId: 'other-board',
+                name: 'Estado ajeno',
+                category: 'TODO',
+                color: '#000000',
+                position: 0,
+              },
+            ])
+          : original(query),
+    );
+    render(<SynchronizedViews view="list" />);
+    const state = await screen.findByLabelText(`Estado de ${task.title}`);
+    expect(within(state).queryByRole('option', { name: 'Estado ajeno' })).toBeNull();
+  });
+
+  it('el colaborador puede editar su tarea, pero no mover tareas ajenas ni eliminarlas', async () => {
+    context = {
+      ...context,
+      actor: {
+        ...context.actor,
+        id: demoIds.collab,
+        role: 'COLLABORATOR',
+        teamIds: [demoIds.teamB],
+      },
+    };
+    render(<SynchronizedViews view="list" />);
+    expect(await screen.findByRole('button', { name: `Editar ${task.title}` })).toBeTruthy();
+    expect(
+      (screen.getByLabelText('Estado de Mantenimiento de septiembre') as HTMLSelectElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Editar Mantenimiento de septiembre' })).toBeNull();
+    expect(screen.queryByRole('button', { name: `Eliminar ${task.title}` })).toBeNull();
+  });
+
+  it('abre el detalle desde lista o agenda conservando contexto y permite reprogramar desde agenda', async () => {
+    const user = userEvent.setup();
+    const update = vi.spyOn(context.repository, 'updateWorkItem');
+    nav.query = `projectId=${demoIds.opsProject}&q=bomba&assignee=${demoIds.collab}`;
+    const { rerender } = render(<SynchronizedViews view="list" />);
+    const href = (await screen.findByRole('link', { name: task.title })).getAttribute('href')!;
+    const url = new URL(href, 'http://local');
+    expect(url.pathname).toBe('/operaciones/tablero');
+    expect(url.searchParams.get('taskId')).toBe(task.id);
+    expect(url.searchParams.get('board')).toBe(task.boardId);
+    expect(url.searchParams.get('phId')).toBe(context.phId);
+    expect(url.searchParams.get('q')).toBe('bomba');
+    nav.pathname = '/operaciones/calendario';
+    rerender(<SynchronizedViews view="calendar" />);
+    await user.click(screen.getByRole('button', { name: 'Agenda' }));
+    expect(
+      screen.getByRole('link', { name: `${task.key} · ${task.title}` }).getAttribute('href'),
+    ).toBe(href);
+    fireEvent.change(screen.getByLabelText(`Fecha de ${task.title}`), {
+      target: { value: '2026-09-21' },
+    });
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        task.id,
+        expect.objectContaining({ startsOn: '2026-09-21' }),
+      ),
+    );
+  });
+
+  it('permite creación según la política vigente pero no reprogramar tareas ajenas a un colaborador', async () => {
+    context = {
+      ...context,
+      actor: {
+        ...context.actor,
+        id: demoIds.collab,
+        role: 'COLLABORATOR',
+        teamIds: [demoIds.teamB],
+      },
+    };
+    render(<SynchronizedViews view="calendar" />);
+    await screen.findByText(task.title);
+    await userEvent.click(screen.getByRole('button', { name: 'Mes' }));
+    expect(screen.getAllByRole('button', { name: /Crear tarea el/ })).toHaveLength(30);
+    expect(
+      (screen.getByLabelText('Fecha de Mantenimiento de septiembre') as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect((screen.getByLabelText(`Fecha de ${task.title}`) as HTMLInputElement).disabled).toBe(
+      false,
+    );
+  });
+
   it('encuentra con los filtros compartidos una tarea de una página posterior', async () => {
     nav.query = `q=posterior&assignee=${demoIds.collab}`;
     const later = { ...task, id: 'later-page', title: 'Tarea posterior' };

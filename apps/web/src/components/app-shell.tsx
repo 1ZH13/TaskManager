@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import {
+  ArrowLeft,
   Bell,
   BriefcaseBusiness,
   ChartNoAxesCombined,
@@ -25,6 +26,7 @@ import { demoIds } from '@task-manager/data';
 import { demoSeed, useDemo } from './demo-context';
 import { AccessibleDialog } from './accessible-dialog';
 import { projectViewHref } from './project-view-query';
+import projectNavigation from './project-navigation.module.css';
 const navigation = [
   ['home', '/', LayoutDashboard],
   ['administrative', '/administrativa', BriefcaseBusiness],
@@ -264,9 +266,12 @@ function AppShellContent({ children }: { children: ReactNode }) {
         )}
         {projectBase && (
           <>
-            <section className="project-header">
-              <Link href={projectBase}>Volver a proyectos</Link>
-              <p className="project-name">{projectName}</p>
+            <section className={projectNavigation.context} aria-label="Contexto del proyecto">
+              <Link className={projectNavigation.backLink} href={projectBase}>
+                <ArrowLeft size={16} aria-hidden="true" />
+                <span>Volver a proyectos</span>
+              </Link>
+              <p className={projectNavigation.projectName}>{projectName}</p>
             </section>
             <nav className="project-tabs" aria-label="Navegación del proyecto">
               {projectTabs.map(([key, slug]) => {

@@ -10,6 +10,7 @@ export function AccessibleDialog({
   label,
   role = 'dialog',
   className = 'task-modal',
+  returnFocusSelector,
 }: {
   children: ReactNode;
   onClose: () => void;
@@ -17,6 +18,7 @@ export function AccessibleDialog({
   label?: string;
   role?: 'dialog' | 'alertdialog';
   className?: string;
+  returnFocusSelector?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
@@ -27,9 +29,15 @@ export function AccessibleDialog({
     dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     return () => {
       dialog.close();
-      if (trigger?.isConnected) trigger.focus();
+      const target =
+        trigger?.isConnected && trigger !== document.body
+          ? trigger
+          : returnFocusSelector
+            ? document.querySelector<HTMLElement>(returnFocusSelector)
+            : null;
+      target?.focus({ preventScroll: true });
     };
-  }, []);
+  }, [returnFocusSelector]);
   return (
     <dialog
       ref={ref}

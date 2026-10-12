@@ -8,7 +8,8 @@ export function projectViewHref(base: string, view: string, search: { toString()
   if (taskViews.has(view)) keys.push('board', 'q', 'assignee');
   if (view === 'tablero')
     keys.push('priority', 'team', 'type', 'provider', 'dueFrom', 'dueTo', 'group');
-  if (view === 'lista') keys.push('startsFrom', 'startsTo');
+  if (view === 'lista') keys.push('startsFrom', 'startsTo', 'fields', 'sort', 'direction');
+  if (view === 'calendario') keys.push('calendarMode', 'date');
   for (const key of keys) {
     const value = current.get(key);
     if (value) next.set(key, value);

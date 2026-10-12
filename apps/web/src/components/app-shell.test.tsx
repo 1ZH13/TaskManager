@@ -1,7 +1,8 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './app-shell';
+import { demoIds } from '@task-manager/data';
 
 const { replace, route } = vi.hoisted(() => ({ replace: vi.fn(), route: { query: '' } }));
 vi.mock('next/navigation', () => ({
@@ -121,6 +122,25 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Volver a proyectos' }).getAttribute('href')).toBe(
       '/operaciones',
     );
+  });
+  it('separa el contexto del proyecto y ofrece regreso accesible con flecha y sin alterar la ruta', async () => {
+    route.query = `projectId=${demoIds.opsProject}`;
+    render(
+      <AppShell>
+        <p>Contenido</p>
+      </AppShell>,
+    );
+    await screen.findByLabelText('1 validaciones pendientes');
+    const context = screen.getByRole('region', { name: 'Contexto del proyecto' });
+    const back = within(context).getByRole('link', { name: 'Volver a proyectos' });
+    expect(back.getAttribute('href')).toBe('/operaciones');
+    expect(back.className).toBeTruthy();
+    expect(back.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(within(context).getByText('Mantenimiento preventivo')).toBeTruthy();
+    back.focus();
+    expect(document.activeElement).toBe(back);
+    await userEvent.setup().tab();
+    expect(document.activeElement).toBe(screen.getByRole('link', { name: 'list' }));
   });
   it('reinicia proyecto y filtros al cambiar de usuario', async () => {
     route.query =

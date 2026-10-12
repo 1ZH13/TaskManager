@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
+  can,
   completionPercent,
   expandOccurrences,
   selectWorkItems,
@@ -11,13 +12,13 @@ import {
 import { DataError, demoIds } from '@task-manager/data';
 import type { Board, BoardColumn, Person, WorkItem } from '@task-manager/shared';
 import { Button } from '../../../../packages/ui/src/index';
-import { IconButton } from '../../../../packages/ui/src/index';
-import { Pencil, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { useDemo } from './demo-context';
 import { FilterSelect } from './filter-select';
 import { AccessibleDialog } from './accessible-dialog';
 import { projectViewHref } from './project-view-query';
 import { listAllWorkItems } from './task-link';
+import { TaskTable } from './task-table';
 
 type View = 'list' | 'calendar' | 'timeline';
 const today = '2026-09-19';
@@ -102,7 +103,26 @@ function ScopedViews({
     const base = pathname.slice(0, pathname.lastIndexOf('/'));
     router.replace(projectViewHref(base, slug, next), { scroll: false });
   };
-  const [calendarMode, setCalendarMode] = useState<'month' | 'week' | 'agenda'>('week');
+  const taskHref = (item: WorkItem) => {
+    const next = new URLSearchParams(params.toString());
+    next.set('phId', phId);
+    next.set('projectId', item.projectId);
+    next.set('board', item.boardId);
+    const base = pathname.slice(0, pathname.lastIndexOf('/'));
+    const url = projectViewHref(base, 'tablero', next);
+    return `${url}${url.includes('?') ? '&' : '?'}taskId=${encodeURIComponent(item.id)}`;
+  };
+  const calendarModeParam = params.get('calendarMode');
+  const calendarMode =
+    calendarModeParam === 'month' || calendarModeParam === 'agenda' ? calendarModeParam : 'week';
+  const anchorParam = params.get('date') ?? '';
+  const anchorDate = new Date(`${anchorParam}T00:00:00Z`);
+  const calendarAnchor =
+    /^\d{4}-\d{2}-\d{2}$/.test(anchorParam) &&
+    Number.isFinite(anchorDate.getTime()) &&
+    anchorDate.toISOString().slice(0, 10) === anchorParam
+      ? anchorParam
+      : today;
   const [zoom, setZoom] = useState<'week' | 'month' | 'quarter'>('month');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -371,9 +391,10 @@ function ScopedViews({
         <ListView
           items={filtered}
           columns={columns}
+          people={people}
+          href={taskHref}
           update={update}
           move={move}
-          canEdit={actor.role === 'ADMIN'}
           pending={pending}
           error={error}
           onDelete={(item) =>
@@ -387,7 +408,17 @@ function ScopedViews({
           updateDate={updateDate}
           createForDate={createForDate}
           mode={calendarMode}
-          setMode={setCalendarMode}
+          setMode={(mode) => updateFilter('calendarMode', mode)}
+          anchor={calendarAnchor}
+          setAnchor={(date) => updateFilter('date', date)}
+          href={taskHref}
+          pending={pending}
+          canEdit={(item) => can(actor, 'task.update', item)}
+          canCreate={can(actor, 'task.create', {
+            phId,
+            projectId,
+            projectAllowsCollaboratorCreate: true,
+          })}
         />
       ) : (
         <TimelineView
@@ -483,18 +514,20 @@ function State({ item, columns }: { item: WorkItem; columns: BoardColumn[] }) {
 function ListView({
   items,
   columns,
+  people,
+  href,
   update,
   move,
-  canEdit,
   pending,
   error,
   onDelete,
 }: {
   items: WorkItem[];
   columns: BoardColumn[];
+  people: Person[];
+  href: (item: WorkItem) => string;
   update: (item: WorkItem, change: Partial<WorkItem>) => Promise<boolean>;
   move: (item: WorkItem, columnId: string) => void;
-  canEdit: boolean;
   pending: boolean;
   error: string | null;
   onDelete: (item: WorkItem) => void;
@@ -502,61 +535,16 @@ function ListView({
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
   return (
     <>
-      <p role="status">
-        {items.length ? `${items.length} tareas` : 'No hay tareas que coincidan con los filtros.'}
-      </p>
-      <div className="task-table" role="table" aria-label="Lista de tareas">
-        <div role="row" className="task-table__head">
-          <span role="columnheader">ID de la tarea</span>
-          <span role="columnheader">Nombre de la tarea</span>
-          <span role="columnheader">Descripción de la tarea</span>
-          <span role="columnheader">Recurrencia</span>
-          <span role="columnheader">Estado</span>
-          <span role="columnheader">Acciones</span>
-        </div>
-        {items.map((item) => (
-          <div role="row" key={item.id}>
-            <strong role="cell">{item.key}</strong>
-            <strong role="cell">{item.title}</strong>
-            <span role="cell">{item.description ?? 'Sin descripción'}</span>
-            <span role="cell">
-              {item.recurrence ? recurrenceLabel[item.recurrence.frequency] : 'No recurrente'}
-            </span>
-            <span role="cell">
-              <select
-                disabled={pending}
-                aria-label={`Estado de ${item.title}`}
-                value={item.columnId}
-                onChange={(event) => move(item, event.target.value)}
-              >
-                {columns.map((column) => (
-                  <option key={column.id} value={column.id}>
-                    {column.name}
-                  </option>
-                ))}
-              </select>
-            </span>
-            <span role="cell" className="task-table__actions">
-              {canEdit && (
-                <>
-                  <IconButton label={`Editar ${item.title}`} onClick={() => setEditingItem(item)}>
-                    <Pencil size={16} />
-                  </IconButton>
-                  <IconButton
-                    disabled={pending}
-                    label={`Eliminar ${item.title}`}
-                    onClick={() => {
-                      if (window.confirm(`¿Eliminar ${item.title}?`)) onDelete(item);
-                    }}
-                  >
-                    <Trash2 size={16} />
-                  </IconButton>
-                </>
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
+      <TaskTable
+        items={items}
+        columns={columns}
+        people={people}
+        href={href}
+        pending={pending}
+        move={move}
+        onEdit={setEditingItem}
+        onDelete={onDelete}
+      />
       {editingItem && (
         <TaskEditModal
           item={editingItem}
@@ -652,6 +640,12 @@ function CalendarView({
   createForDate,
   mode,
   setMode,
+  anchor,
+  setAnchor,
+  href,
+  pending,
+  canEdit,
+  canCreate,
 }: {
   items: WorkItem[];
   columns: BoardColumn[];
@@ -659,8 +653,13 @@ function CalendarView({
   createForDate: (date: string) => void;
   mode: 'month' | 'week' | 'agenda';
   setMode: (mode: 'month' | 'week' | 'agenda') => void;
+  anchor: string;
+  setAnchor: (date: string) => void;
+  href: (item: WorkItem) => string;
+  pending: boolean;
+  canEdit: (item: WorkItem) => boolean;
+  canCreate: boolean;
 }) {
-  const [anchor, setAnchor] = useState(today);
   const days = daysAt(anchor, mode === 'week');
   const unscheduled = items.filter((item) => !item.startsOn);
   const events = items.flatMap((item) =>
@@ -676,7 +675,7 @@ function CalendarView({
   );
   const drop = (id: string, day: string) => {
     const item = items.find((candidate) => candidate.id === id);
-    if (item && !item.recurrence) updateDate(item, day);
+    if (item && !item.recurrence && !pending && canEdit(item)) updateDate(item, day);
   };
   const navigate = (direction: number) => {
     if (mode === 'week') setAnchor(addDays(anchor, direction * 7));
@@ -738,10 +737,24 @@ function CalendarView({
             .map(({ item, date, key }) => (
               <li key={key}>
                 <time dateTime={date}>{label(date)}</time>
-                <strong>
+                <Link className="task-title-link" href={href(item)}>
                   {item.key} · {item.title}
-                </strong>
+                </Link>
                 <State item={item} columns={columns} />
+                {!item.recurrence && canEdit(item) && (
+                  <label className="agenda-date">
+                    Reprogramar
+                    <input
+                      type="date"
+                      aria-label={`Fecha de ${item.title}`}
+                      value={item.startsOn ?? ''}
+                      disabled={pending}
+                      onChange={(event) =>
+                        event.target.value && updateDate(item, event.target.value)
+                      }
+                    />
+                  </label>
+                )}
               </li>
             ))}
         </ul>
@@ -773,11 +786,13 @@ function CalendarView({
                     <article
                       key={key}
                       className={`calendar-event calendar-event--${item.priority.toLowerCase()}`}
-                      draggable={!item.recurrence}
+                      draggable={!item.recurrence && !pending && canEdit(item)}
                       onDragStart={(event) => event.dataTransfer.setData('task', item.id)}
                     >
                       <span className="calendar-event__key">{item.key}</span>
-                      <strong>{item.title}</strong>
+                      <Link className="task-title-link" href={href(item)}>
+                        {item.title}
+                      </Link>
                       <span className="calendar-event__meta">
                         <State item={item} columns={columns} />
                       </span>
@@ -788,6 +803,7 @@ function CalendarView({
                           Fecha
                           <input
                             aria-label={`Fecha de ${item.title}`}
+                            disabled={pending || !canEdit(item)}
                             type="date"
                             value={item.startsOn ?? ''}
                             onChange={(event) =>
@@ -798,13 +814,16 @@ function CalendarView({
                       )}
                     </article>
                   ))}
-                <button
-                  className="calendar-create-task"
-                  aria-label={`Crear tarea el ${label(day)}`}
-                  onClick={() => createForDate(day)}
-                >
-                  + Crear tarea
-                </button>
+                {canCreate && (
+                  <button
+                    className="calendar-create-task"
+                    aria-label={`Crear tarea el ${label(day)}`}
+                    onClick={() => createForDate(day)}
+                    disabled={pending}
+                  >
+                    + Crear tarea
+                  </button>
+                )}
               </section>
             ))}
           </div>
@@ -814,16 +833,18 @@ function CalendarView({
               unscheduled.map((item) => (
                 <article
                   key={item.id}
-                  draggable
+                  draggable={!pending && canEdit(item) && !item.recurrence}
                   onDragStart={(event) => event.dataTransfer.setData('task', item.id)}
                 >
-                  <strong>
+                  <Link className="task-title-link" href={href(item)}>
                     {item.key} · {item.title}
-                  </strong>
+                  </Link>
                   <label>
                     Fecha
                     <input
                       type="date"
+                      aria-label={`Fecha de ${item.title}`}
+                      disabled={pending || !canEdit(item) || !!item.recurrence}
                       onChange={(event) =>
                         event.target.value && updateDate(item, event.target.value)
                       }
